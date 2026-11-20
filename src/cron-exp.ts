@@ -1,67 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { isMatch, isValid, nextRun, previousRun } from 'cron-fast';
-import { log } from './utils.js';
-import { consts, CronMarker } from './consts.js';
 import { extname } from 'node:path';
-
-/**
- * @typedef {Object} ExtractedCron
- * @property {string[]} tokens   - 解析出的 token 列表
- * @property {string} exp - 疑似 cron 表达式的字符串列表
- */
-
-/**
- * 从一行文本中提取带标记的 5 段 cron
- *
- * 只认注释后面的“@cron 分 时 日 月 周”
- * 标记后的前 5 个 token 必须能通过 isValid，不做滑动窗口匹配，
- * 避免说明文字里偶然出现的 5 个数字被误当成 cron（例如“分片 1 2 3 4 5 已确认”）。
- *
- * @param {string} trimmed  - 已经去掉前导空格的行文本
- * @param {boolean} inBlock  - 是否在 @cronbegin 和 @cronend 块中
- * @param {string} filepath       - 文件路径，用于日志输出
- * @returns {ExtractedCron | "@cronbegin"| "@cronend" | null} 不是 cron 行返回 null
- */
-export const extractCron = (trimmed, inBlock, filepath) => {
-  if (trimmed.search(CronMarker.BEGIN_REGEX) !== -1) {
-    return CronMarker.BEGIN;
-  }
-  if (trimmed.search(CronMarker.END_REGEX) !== -1) {
-    return CronMarker.END;
-  }
-
-  // 可以确保到此为止的都是注释，且trim过
-  const markerIndex = trimmed.search(CronMarker.CRON_REGEX);
-  if (markerIndex === -1) {
-    if (inBlock) {
-      log(`@cron marker is needed in cron blocks to avoid ambiguity like "
-/**
- * @cronbegin
- *  2 * * * *
- * @cronend
- */
-"
-This could be interpreted as "* 2 * * * *" or "2 * * * *" which both make sense: ${filepath}`);
-    }
-    return null;
-  }
-
-  const startIndex = markerIndex + CronMarker.CRON.length;
-
-  // 直接切片，从@cron后面开始获取字符
-  const tokens = trimmed.slice(startIndex).split(/\s+/).filter(Boolean);
-
-  if (tokens.length < 5) {
-    return null;
-  }
-
-  const exp = tokens.slice(0, 5).join(' ');
-  if (!isValid(exp)) {
-    return null;
-  }
-
-  return { tokens, exp };
-};
+import { readFile } from 'node:fs/promises';
+import { log } from './utils.js';
 
 /**
  * @typedef {Object} CronExpItem
