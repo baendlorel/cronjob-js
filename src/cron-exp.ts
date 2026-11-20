@@ -11,42 +11,6 @@ import { log } from './utils.js';
  */
 
 /**
- * 判断文件本轮是否该运行
- *
- * @param {string} filepath
- * @param {Date} now
- * @returns 要跑的 cron，是否dev模式，以及要跑多少次；
- *   文件读不了、没有合法 cron 时返回 undefined
- */
-export const shouldRun = (filepath, now) => {
-  const list = getCronExps(filepath);
-  if (!list) {
-    return undefined;
-  }
-
-  if (list.length === 0) {
-    log(`No valid cron expression found in file: ${filepath}`);
-    return undefined;
-  }
-
-  const runList = [];
-  list
-    .filter((v) => matchTime(v.exp, now).matched)
-    .forEach((item) => {
-      if (item.group === 0) {
-        runList.push(item);
-        return;
-      }
-
-      if (!runList.some((v) => v.group === item.group)) {
-        runList.push(item);
-      }
-    });
-
-  return runList;
-};
-
-/**
  * 判定本轮是否该运行
  *
  * @param {string} exp

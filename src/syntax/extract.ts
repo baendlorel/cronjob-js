@@ -1,5 +1,5 @@
 import { extname } from 'node:path';
-import cron from 'node-cron';
+import { isValid } from 'cron-fast';
 import { Marker } from '../consts.js';
 import { log } from '../utils.js';
 import { getAllowFn, getShebang } from './allow.js';
@@ -32,7 +32,7 @@ export function extractCron(trimmed: string, inBlock: boolean, filepath: string)
   // 直接切片，从@cron后面开始获取字符
   const exp = trimmed.slice(markerIndex + Marker.CRON.length);
 
-  return cron.validate(exp) ? exp : null;
+  return isValid(exp) ? exp : null;
 }
 
 interface JobItem {
