@@ -35,16 +35,12 @@ export function extractCron(trimmed: string, inBlock: boolean, filepath: string)
   return cron.validate(exp) ? exp : null;
 }
 
-interface CronExpItem {
+interface JobItem {
   /**
-   * 分组编号，同一个分组只要一个匹配即可运行，只运行一次
+   * key    分组编号，同一个分组只要一个匹配即可运行，只运行一次
+   * value  cron表达式数组
    */
-  group: number;
-
-  /**
-   * cron表达式
-   */
-  exp: string;
+  map: Map<number, string[]>;
 
   /**
    * 有可能从文件中解析出 shebang
@@ -52,10 +48,17 @@ interface CronExpItem {
   shebang: string | null;
 }
 
+export const getOrInsert = (map: Map<any, any[]>, key: any): any[] => {
+  if (!map.has(key)) {
+    map.set(key, []);
+  }
+  return map.get(key)!;
+};
+
 /**
  * 读取文件中符合注释后加cron表达式的表达式
  */
-export function getCronExps({ filepath, lines }: { filepath: string; lines: string[] }): CronExpItem[] | null {
+export function getCronExps(filepath: string, lines: string[]): JobItem | null {
   const allowFn = getAllowFn(extname(filepath));
 
   if (lines.length === 0) {
@@ -83,7 +86,9 @@ export function getCronExps({ filepath, lines }: { filepath: string; lines: stri
     return null;
   }
 
-  const list: CronExpItem[] = [];
+  // TODO 这里应该改为：shebang只传一次，用map，0->[exp,exp]
+  const map = new Map<number, string[]>();
+
   let inCronBlock = false;
   let group = 0;
   for (const line of lines) {
@@ -113,11 +118,7 @@ export function getCronExps({ filepath, lines }: { filepath: string; lines: stri
       continue;
     }
 
-    list.push({
-      group: inCronBlock ? group : 0,
-      shebang,
-      exp,
-    });
+    getOrInsert(map, 0).push(exp);
   }
 
   // 语法错误不予解析
@@ -126,5 +127,5 @@ export function getCronExps({ filepath, lines }: { filepath: string; lines: stri
     return null;
   }
 
-  return list;
+  return { map, shebang };
 }
