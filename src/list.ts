@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { nextRun } from 'cron-fast';
-import { getCronExps } from './cron-exp.js';
 import { tryGlobSync } from './utils.js';
+import { getCronExps } from './syntax/extract.js';
 
 const files = tryGlobSync();
 

@@ -42,7 +42,7 @@ export interface CronjobConfig extends UserCronjobConfig {
 
 export const cronjobConfig: CronjobConfig = {} as CronjobConfig;
 
-export function load(rawConfig?: Partial<UserCronjobConfig>) {
+export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfig {
   const {
     dir = process.cwd(),
     logDir = dir,
@@ -82,4 +82,5 @@ export function load(rawConfig?: Partial<UserCronjobConfig>) {
     hour12: false,
     timeZone: timezone,
   });
+  return cronjobConfig;
 }

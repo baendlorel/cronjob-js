@@ -48,15 +48,15 @@ export function run(config: CronjobConfig, { filepath, interpreter }: Job) {
 
     child.on('error', (e) => {
       closeOutput();
-      log(`${LogTag.error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
+      log(`${LogTag.Error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
     });
     child.on('spawn', () => {
       closeOutput();
-      log(`${LogTag.spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
+      log(`${LogTag.Spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
     });
     child.on('exit', (code, signal) => {
       closeOutput();
-      log(`${LogTag.exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
+      log(`${LogTag.Exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
     });
     child.unref();
   } catch (e) {

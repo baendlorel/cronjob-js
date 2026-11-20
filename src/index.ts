@@ -6,23 +6,22 @@
 import cron from 'node-cron';
 import { performance } from 'node:perf_hooks';
 
-import { log, tryGlobSync, getCwd } from './utils.js';
-import { shouldRun } from './cron-exp.js';
-import { runFile } from './run.js';
-import { initialize } from './initialize.js';
+import { type CronjobConfig, loadConfig } from './config.js';
+import { log, tryGlobSync } from './utils.js';
+import { shouldRun } from './syntax/job.js';
+import { run } from './run.js';
 
-export const cronjob = async () => {
+export const cronjob = (rawConfig: Partial<CronjobConfig>) => {
   try {
-    // 初始化完成（拿到单例锁、目录就绪）之前不要开始调度
-    await initialize();
+    const config = loadConfig(rawConfig);
+    log(`Config loaded: ${JSON.stringify(config)}`);
 
-    const cwd = getCwd();
-    const task = cron.schedule('* * * * *', () => {
+    const taskFn = async () => {
       // # 尽早读取new Date，早于globSync，让取到的时间更接近x分0秒
       const now = new Date();
 
       // 1、查找CRONJOB_DIR下面的所有符合suffix的文件
-      const files = tryGlobSync();
+      const files = tryGlobSync(config);
       if (!files) {
         return;
       }
@@ -35,22 +34,16 @@ export const cronjob = async () => {
       const performanceNow = performance.now();
       log(`Start`);
 
-      for (let i = 0; i < files.length; i++) {
-        const fullpath = files[i];
-        // 没有匹配到 cron 的，不运行
-        const jobs = shouldRun(fullpath, now);
-        if (!jobs || jobs.length === 0) {
-          continue;
-        }
+      const jobs = await shouldRun(files, now);
 
-        // 符合，则开始运行
-        for (let i = 0; i < jobs.length; i++) {
-          runFile({ fullpath, dev: jobs[i].dev, cwd });
-        }
+      for (let i = 0; i < jobs.length; i++) {
+        run(config, jobs[i]);
       }
 
       log(`Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
-    });
+    };
+
+    const task = cron.schedule('* * * * *', taskFn);
 
     log(`Cronjob start! pid=${process.pid}`);
     // # 必须停止task才能正常退出，正常被pm2重启
