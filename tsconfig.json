@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "rootDir": ".",
+    "lib": ["DOM", "ESNEXT", "dom.iterable"],
+    "types": ["node"],
+
+    "checkJs": true,
+    "noEmit": true,
+    "noImplicitAny": false,
+
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+
+    "paths": {
+      "@shared/*": ["./web/_shared/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.js"]
+}

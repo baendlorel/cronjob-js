@@ -1,0 +1,60 @@
+{
+  "name": "fluxion-vio",
+  "version": "0.1.4",
+  "type": "module",
+  "author": {
+    "name": "Kasukabe Tsumugi",
+    "email": "futami16237@gmail.com"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "purpose": "npm",
+  "description": "Fluxion is able to start a server that can dynamically load routers and js files. It is designed to be used to replace PHP",
+  "description_zh": "Fluxion可以启动一个能够动态加载路由和js文件的服务器，旨在替代PHP",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.cts",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "instruction.md",
+    "README.md"
+  ],
+  "homepage": "https://github.com/baendlorel/fluxion#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/baendlorel/fluxion"
+  },
+  "keywords": [
+    "framework",
+    "server",
+    "typescript",
+    "javascript"
+  ],
+  "scripts": {
+    "build": "tsx ./scripts/index.ts --build",
+    "pub": "tsx ./scripts/index.ts --publish",
+    "check": "tsc --noEmit -p tsconfig.build.json",
+    "lint": "oxlint ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "oxlint": "^1.94.0",
+    "prettier": "^3.10.1",
+    "tsdown": "^0.23.7",
+    "tslib": "^2.9.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "node-cron": "^4.6.0"
+  }
+}
