@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import cron from 'node-cron';
 import { log } from '../utils.js';
-import { getCronExps } from './extract.js';
+import { getCronExps, getMatchedJob, JobItem } from './extract.js';
 
 interface RawFileContent {
   filepath: string;
@@ -38,46 +38,30 @@ export async function loadFiles(filepaths: string[]) {
  * @returns 要跑的 cron，要跑多少次；
  */
 export async function shouldRun(filepaths: string[], now: Date) {
-  const rawFiles = await loadFiles(filepaths);
+  const files = await loadFiles(filepaths);
 
-  const files = rawFiles
-    .filter((v): v is FileContent => {
-      if (v.error) {
-        log(`Error loading file ${v.filepath}: ${v.error}`);
-        return false;
-      } else {
-        return true;
-      }
-    })
-    .map((v) => {
-      const lines = v.content.split('\n').map((line) => line.trim());
-      return getCronExps(v.filepath, lines);
-    });
-
-  // TODO 这里要有默认的shebang，也就是解释器
-  const runList: { filepath: string; shebang: string }[] = [];
+  const jobs: JobItem[] = [];
 
   for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    if (!file) {
+    const f = files[i];
+    if (!f.content) {
+      log(`Error loading file ${f.filepath}: ${f.error}`);
       continue;
     }
 
-    const zero = file.map.get(0);
-    if (zero) {
-      for (const item of zero) {
-        cron.validateDetailed(item);
-      }
+    const lines = f.content.split('\n').map((line) => line.trim());
+    const raw = getCronExps(f.filepath, lines);
+    if (!raw) {
+      continue;
     }
+
+    // 这里要把shebang算好，matchedjob要运行多少次直接看数字
+    const matchedJobs = getMatchedJob(raw, now);
+    jobs.push(matchedJobs);
   }
 
-  files.map((file) => {
-    file.map.forEach((exps, group) => {
-      exps.forEach((exp) => {
-        // 这里可以处理每个 cron 表达式
-      });
-    });
-  });
+  // 所有group为0的，都要单独执行
+  // 所有group不为0的，同一个文件下，只要有一条被记录就行
 
   return runList;
 }

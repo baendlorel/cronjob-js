@@ -1,5 +1,5 @@
 import { extname } from 'node:path';
-import { isValid } from 'cron-fast';
+import { isMatch, isValid } from 'cron-fast';
 import { Marker } from '../consts.js';
 import { log } from '../utils.js';
 import { getAllowFn, getShebang } from './allow.js';
@@ -35,16 +35,14 @@ export function extractCron(trimmed: string, inBlock: boolean, filepath: string)
   return isValid(exp) ? exp : null;
 }
 
-interface JobItem {
-  /**
-   * key    分组编号，同一个分组只要一个匹配即可运行，只运行一次
-   * value  cron表达式数组
-   */
-  map: Map<number, string[]>;
+export interface CronExpItem {
+  exp: string;
+  group: number;
+}
 
-  /**
-   * 有可能从文件中解析出 shebang
-   */
+export interface JobItem {
+  list: CronExpItem[];
+  filepath: string;
   shebang: string | null;
 }
 
@@ -86,8 +84,7 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
     return null;
   }
 
-  // TODO 这里应该改为：shebang只传一次，用map，0->[exp,exp]
-  const map = new Map<number, string[]>();
+  const list: CronExpItem[] = [];
 
   let inCronBlock = false;
   let group = 0;
@@ -117,8 +114,7 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
       inCronBlock = false;
       continue;
     }
-
-    getOrInsert(map, 0).push(exp);
+    list.push({ exp, group });
   }
 
   // 语法错误不予解析
@@ -127,5 +123,27 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
     return null;
   }
 
-  return { map, shebang };
+  return { list, shebang, filepath };
+}
+
+/**
+ * 获取现在应该运行的job
+ * - 不会有人写非常多的 cron 表达式，直接遍历即可
+ *
+ * ! 仅用于同一个filepath
+ */
+export function getMatchedJob(item: JobItem, now: Date): JobItem {
+  const matched: CronExpItem[] = [];
+  for (let i = 0; i < item.list.length; i++) {
+    const job = item.list[i];
+    if (job.group === 0 && isMatch(job.exp, now)) {
+      matched.push(job);
+      continue;
+    }
+    if (!matched.some((v) => v.group === job.group) && isMatch(job.exp, now)) {
+      matched.push(job);
+    }
+  }
+  item.list = matched;
+  return item;
 }
