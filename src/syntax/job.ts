@@ -1,29 +1,18 @@
+import type { FileContent, Job, JobItem } from '../types.js';
 import { readFile } from 'node:fs/promises';
-import cron from 'node-cron';
+import { isMatch } from 'cron-fast';
 import { log } from '../utils.js';
-import { getCronExps, getMatchedJob, JobItem } from './extract.js';
-
-interface RawFileContent {
-  filepath: string;
-  content: string | null;
-  error: Error | null;
-}
-
-interface FileContent {
-  filepath: string;
-  content: string;
-  error: null;
-}
+import { getCronExps } from './extract.js';
 
 const CHUNK_SIZE = 100;
-export async function loadFiles(filepaths: string[]) {
-  const result: RawFileContent[] = [];
+export async function loadFiles(filepaths: string[]): Promise<FileContent[]> {
+  const result: FileContent[] = [];
   for (let i = 0; i < filepaths.length; i += CHUNK_SIZE) {
     const chunk = filepaths.slice(i, i + CHUNK_SIZE);
     const promises = chunk.map((filepath) =>
       readFile(filepath, 'utf8')
-        .then((content) => ({ filepath, content, error: null }) as RawFileContent)
-        .catch((error) => ({ filepath, content: null, error }) as RawFileContent),
+        .then((content) => ({ filepath, content, error: null }) as FileContent)
+        .catch((error) => ({ filepath, content: null, error }) as FileContent),
     );
     const chunkResult = await Promise.all(promises);
     result.push(...chunkResult);
@@ -37,14 +26,10 @@ export async function loadFiles(filepaths: string[]) {
  *
  * @returns 要跑的 cron，要跑多少次；
  */
-export async function shouldRun(filepaths: string[], now: Date) {
+export async function shouldRun(filepaths: string[], now: Date): Promise<Job[]> {
   const files = await loadFiles(filepaths);
 
-  const runs: {
-    filepath: string;
-    shebang: string | null;
-    count: number;
-  }[] = [];
+  const runs: Job[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -67,4 +52,27 @@ export async function shouldRun(filepaths: string[], now: Date) {
   }
 
   return runs;
+}
+
+/**
+ * 获取现在应该运行的job
+ * - 不会有人写非常多的 cron 表达式，直接遍历即可
+ *
+ * ! 仅用于同一个filepath
+ */
+export function getMatchedJob(item: JobItem, now: Date): Job {
+  let count = 0;
+  const set = new Set<number>();
+  for (let i = 0; i < item.list.length; i++) {
+    const job = item.list[i];
+    if (job.group === 0 && isMatch(job.exp, now)) {
+      count++;
+      continue;
+    }
+    if (!set.has(job.group) && isMatch(job.exp, now)) {
+      count++;
+      set.add(job.group);
+    }
+  }
+  return { filepath: item.filepath, interpreter: item.interpreter, count };
 }

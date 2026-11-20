@@ -1,5 +1,5 @@
+import type { Interpreter } from './types.js';
 import { spawnSync } from 'node:child_process';
-import { extname } from 'node:path';
 
 /**
  * 检测系统中可用的运行时命令。
@@ -14,11 +14,6 @@ export function detectCommand(cmd: string) {
 
   // status === 0 表示命令存在且正常退出
   return result.status === 0 ? cmd : null;
-}
-
-export interface Interpreter {
-  cmd: string;
-  args: string[];
 }
 
 // 增加一个尝试找到python运行时的脚本

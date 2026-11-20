@@ -1,10 +1,11 @@
+import type { CronExpItem, JobItem } from '../types.js';
 import { extname } from 'node:path';
-import { isMatch, isValid } from 'cron-fast';
+import { isValid } from 'cron-fast';
 import { Marker } from '../consts.js';
 import { log } from '../utils.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
-import { getDefaultInterpreter, type Interpreter } from '../interpreter.js';
+import { getDefaultInterpreter } from '../interpreter.js';
 
 /**
  * 从一行文本中提取带标记的 cron 表达`式
@@ -35,17 +36,6 @@ export function extractCron(trimmed: string, inBlock: boolean, filepath: string)
   const exp = trimmed.slice(markerIndex + Marker.CRON.length);
 
   return isValid(exp) ? exp : null;
-}
-
-export interface CronExpItem {
-  exp: string;
-  group: number;
-}
-
-export interface JobItem {
-  list: CronExpItem[];
-  filepath: string;
-  interpreter: Interpreter;
 }
 
 export const getOrInsert = (map: Map<any, any[]>, key: any): any[] => {
@@ -132,27 +122,4 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
   }
 
   return { list, interpreter, filepath };
-}
-
-/**
- * 获取现在应该运行的job
- * - 不会有人写非常多的 cron 表达式，直接遍历即可
- *
- * ! 仅用于同一个filepath
- */
-export function getMatchedJob(item: JobItem, now: Date) {
-  let count = 0;
-  const set = new Set<number>();
-  for (let i = 0; i < item.list.length; i++) {
-    const job = item.list[i];
-    if (job.group === 0 && isMatch(job.exp, now)) {
-      count++;
-      continue;
-    }
-    if (!set.has(job.group) && isMatch(job.exp, now)) {
-      count++;
-      set.add(job.group);
-    }
-  }
-  return { filepath: item.filepath, interpreter: item.interpreter, count };
 }

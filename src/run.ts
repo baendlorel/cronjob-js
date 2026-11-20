@@ -2,9 +2,9 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { env } from 'node:process';
-import { consts, joblogtag } from './consts.js';
 import { log } from './utils.js';
-import { hasTsx } from './initialize.js';
+
+export function run() {}
 
 export const runFile = ({ fullpath, dev, cwd }) => {
   let output = null;
@@ -62,9 +62,7 @@ export const runFile = ({ fullpath, dev, cwd }) => {
     });
     child.on('exit', (code, signal) => {
       closeOutput();
-      log(
-        `${joblogtag.exit} path=${relativePath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`,
-      );
+      log(`${joblogtag.exit} path=${relativePath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
     });
     child.unref();
   } catch (e) {
