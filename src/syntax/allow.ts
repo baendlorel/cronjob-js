@@ -23,4 +23,6 @@ const allows = {
   '.sh': (line: string) => line.startsWith('#') || line.length === 0,
 };
 
-export const getAllowFn = (ext: '.ts' | '.js' | '.py' | '.sh') => allows[ext] || (() => false);
+export function getAllowFn(ext: string): (line: string) => boolean {
+  return allows[ext] || (() => false);
+}
