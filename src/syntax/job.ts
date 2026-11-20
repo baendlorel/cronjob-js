@@ -40,7 +40,11 @@ export async function loadFiles(filepaths: string[]) {
 export async function shouldRun(filepaths: string[], now: Date) {
   const files = await loadFiles(filepaths);
 
-  const jobs: JobItem[] = [];
+  const runs: {
+    filepath: string;
+    shebang: string | null;
+    count: number;
+  }[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -57,11 +61,10 @@ export async function shouldRun(filepaths: string[], now: Date) {
 
     // 这里要把shebang算好，matchedjob要运行多少次直接看数字
     const matchedJobs = getMatchedJob(raw, now);
-    jobs.push(matchedJobs);
+    if (matchedJobs.count > 0) {
+      runs.push(matchedJobs);
+    }
   }
 
-  // 所有group为0的，都要单独执行
-  // 所有group不为0的，同一个文件下，只要有一条被记录就行
-
-  return runList;
+  return runs;
 }

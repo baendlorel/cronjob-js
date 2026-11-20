@@ -2,7 +2,8 @@ import { extname } from 'node:path';
 import { isMatch, isValid } from 'cron-fast';
 import { Marker } from '../consts.js';
 import { log } from '../utils.js';
-import { getAllowFn, getShebang } from './allow.js';
+import { getAllowFn } from './allow.js';
+import { getShebang } from './shebang.js';
 
 /**
  * 从一行文本中提取带标记的 cron 表达`式
@@ -54,7 +55,7 @@ export const getOrInsert = (map: Map<any, any[]>, key: any): any[] => {
 };
 
 /**
- * 读取文件中符合注释后加cron表达式的表达式
+ * 从文件内容提取带标记的 cron 表达式
  */
 export function getCronExps(filepath: string, lines: string[]): JobItem | null {
   const allowFn = getAllowFn(extname(filepath));
@@ -132,18 +133,19 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
  *
  * ! 仅用于同一个filepath
  */
-export function getMatchedJob(item: JobItem, now: Date): JobItem {
-  const matched: CronExpItem[] = [];
+export function getMatchedJob(item: JobItem, now: Date) {
+  let count = 0;
+  const set = new Set<number>();
   for (let i = 0; i < item.list.length; i++) {
     const job = item.list[i];
     if (job.group === 0 && isMatch(job.exp, now)) {
-      matched.push(job);
+      count++;
       continue;
     }
-    if (!matched.some((v) => v.group === job.group) && isMatch(job.exp, now)) {
-      matched.push(job);
+    if (!set.has(job.group) && isMatch(job.exp, now)) {
+      count++;
+      set.add(job.group);
     }
   }
-  item.list = matched;
-  return item;
+  return { filepath: item.filepath, shebang: item.shebang, count };
 }
