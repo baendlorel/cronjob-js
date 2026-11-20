@@ -16,9 +16,14 @@ export function detectCommand(cmd: string) {
   return result.status === 0 ? cmd : null;
 }
 
+export interface Interpreter {
+  cmd: string;
+  args: string[];
+}
+
 // 增加一个尝试找到python运行时的脚本
 
-const interpreters = {
+const interpreters: Record<string, Interpreter> = {
   '.ts': {
     cmd: process.execPath,
     args: detectCommand('tsx') ? ['--import', 'tsx'] : [],
@@ -40,7 +45,6 @@ const interpreters = {
 export const hasTsx = interpreters['.ts'].args.length > 0;
 export const pythonCmd = interpreters['.py'].cmd;
 
-export function getDefaultInterpreter(filepath: string) {
-  const ext = extname(filepath);
+export function getDefaultInterpreter(ext: string) {
   return interpreters[ext] || interpreters['.js'];
 }

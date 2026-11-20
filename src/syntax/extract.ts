@@ -4,6 +4,7 @@ import { Marker } from '../consts.js';
 import { log } from '../utils.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
+import { getDefaultInterpreter, type Interpreter } from '../interpreter.js';
 
 /**
  * 从一行文本中提取带标记的 cron 表达`式
@@ -44,7 +45,7 @@ export interface CronExpItem {
 export interface JobItem {
   list: CronExpItem[];
   filepath: string;
-  shebang: string | null;
+  interpreter: Interpreter;
 }
 
 export const getOrInsert = (map: Map<any, any[]>, key: any): any[] => {
@@ -58,7 +59,8 @@ export const getOrInsert = (map: Map<any, any[]>, key: any): any[] => {
  * 从文件内容提取带标记的 cron 表达式
  */
 export function getCronExps(filepath: string, lines: string[]): JobItem | null {
-  const allowFn = getAllowFn(extname(filepath));
+  const ext = extname(filepath);
+  const allowFn = getAllowFn(ext);
 
   if (lines.length === 0) {
     return null;
@@ -124,7 +126,12 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
     return null;
   }
 
-  return { list, shebang, filepath };
+  let interpreter = getDefaultInterpreter(ext);
+  if (shebang) {
+    interpreter = { ...interpreter, cmd: shebang, args: [] };
+  }
+
+  return { list, interpreter, filepath };
 }
 
 /**
@@ -147,5 +154,5 @@ export function getMatchedJob(item: JobItem, now: Date) {
       set.add(job.group);
     }
   }
-  return { filepath: item.filepath, shebang: item.shebang, count };
+  return { filepath: item.filepath, interpreter: item.interpreter, count };
 }
