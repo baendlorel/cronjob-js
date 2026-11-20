@@ -1,3 +1,9 @@
+export interface FileContent {
+  filepath: string;
+  content: string | null;
+  error: Error | null;
+}
+
 export interface Interpreter {
   cmd: string;
   args: string[];
@@ -12,7 +18,14 @@ export interface CronExpItem {
 }
 
 interface JobBase {
+  /**
+   * 完整文件路径
+   */
   filepath: string;
+
+  /**
+   * 解释器信息，包含命令和参数
+   */
   interpreter: Interpreter;
 }
 
@@ -29,10 +42,4 @@ export interface JobItem extends JobBase {
 
 export interface Job extends JobBase {
   count: number;
-}
-
-export interface FileContent {
-  filepath: string;
-  content: string | null;
-  error: Error | null;
 }

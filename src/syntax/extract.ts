@@ -1,4 +1,4 @@
-import type { CronExpItem, JobItem } from '../types.js';
+import type { CronExpItem, JobItem } from '../types/job.js';
 import { extname } from 'node:path';
 import { isValid } from 'cron-fast';
 import { Marker } from '../consts.js';

@@ -1,4 +1,4 @@
-import type { FileContent, Job, JobItem } from '../types.js';
+import type { FileContent, Job, JobItem } from '../types/job.js';
 import { readFile } from 'node:fs/promises';
 import { isMatch } from 'cron-fast';
 import { log } from '../utils.js';

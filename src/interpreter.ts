@@ -1,4 +1,4 @@
-import type { Interpreter } from './types.js';
+import type { Interpreter } from './types/job.js';
 import { spawnSync } from 'node:child_process';
 
 /**
@@ -17,6 +17,7 @@ export function detectCommand(cmd: string) {
 }
 
 // 增加一个尝试找到python运行时的脚本
+export const CMD_NONE = 'none';
 
 const interpreters: Record<string, Interpreter> = {
   '.ts': {
@@ -28,11 +29,15 @@ const interpreters: Record<string, Interpreter> = {
     args: [],
   },
   '.py': {
-    cmd: detectCommand('python3') || detectCommand('python') || 'none',
+    cmd: detectCommand('python3') || detectCommand('python') || CMD_NONE,
     args: [],
   },
   '.sh': {
     cmd: detectCommand('bash') || 'sh',
+    args: [],
+  },
+  none: {
+    cmd: CMD_NONE,
     args: [],
   },
 };
@@ -41,5 +46,5 @@ export const hasTsx = interpreters['.ts'].args.length > 0;
 export const pythonCmd = interpreters['.py'].cmd;
 
 export function getDefaultInterpreter(ext: string) {
-  return interpreters[ext] || interpreters['.js'];
+  return interpreters[ext] || interpreters.none;
 }
