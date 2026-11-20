@@ -35,7 +35,7 @@ interface UserCronjobConfig {
   jobcwd: string | ((scriptPath: string) => string);
 }
 
-interface CronjobConfig extends UserCronjobConfig {
+export interface CronjobConfig extends UserCronjobConfig {
   timeFormat: Intl.DateTimeFormat;
   jobcwd: (scriptPath: string) => string;
 }
