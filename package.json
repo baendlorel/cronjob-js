@@ -55,8 +55,6 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "cron-fast": "^3.15.0",
-    "cron-parser": "^5.10.6",
-    "node-cron": "^4.6.0"
+    "cron-parser": "^5.10.6"
   }
 }

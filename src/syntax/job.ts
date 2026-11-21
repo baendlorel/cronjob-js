@@ -1,9 +1,9 @@
 import type { Job, JobItem } from '../types/job.js';
 import type { CronjobConfig } from '../config.js';
 import { readFile } from 'node:fs/promises';
-import { isMatch } from 'cron-fast';
 import { log } from '../utils.js';
 import { getJobItem } from './extract.js';
+import { matches } from '../cron/parse.js';
 
 type FileContent =
   | {
@@ -39,16 +39,16 @@ export async function loadFiles(filepaths: string[]): Promise<Array<FileContent>
  *
  * ! 仅用于同一个filepath
  */
-export function getMatchedJob(config: CronjobConfig, item: JobItem, now: Date): Job {
+export function getMatchedJob(item: JobItem, now: Date): Job {
   let count = 0;
   const set = new Set<number>();
   for (let i = 0; i < item.flatCronGroups.length; i++) {
     const job = item.flatCronGroups[i];
-    if (job.group === 0 && isMatch(job.exp, now, { timezone: config.timezone })) {
+    if (job.group === 0 && matches(job.cron, now)) {
       count++;
       continue;
     }
-    if (!set.has(job.group) && isMatch(job.exp, now, { timezone: config.timezone })) {
+    if (!set.has(job.group) && matches(job.cron, now)) {
       count++;
       set.add(job.group);
     }
@@ -78,7 +78,7 @@ export function getJobsToRun(config: CronjobConfig, files: FileContent[], now: D
     }
 
     // 这里要把shebang算好，matchedjob要运行多少次直接看数字
-    const matchedJobs = getMatchedJob(config, jobItem, now);
+    const matchedJobs = getMatchedJob(jobItem, now);
     if (matchedJobs.count > 0) {
       runs.push(matchedJobs);
     }
