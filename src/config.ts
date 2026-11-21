@@ -1,4 +1,4 @@
-interface UserCronjobConfig {
+export interface UserCronjobConfig {
   /**
    * Will scan this directory for cronjob scripts
    */

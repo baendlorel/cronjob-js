@@ -5,16 +5,19 @@
  */
 import { performance } from 'node:perf_hooks';
 
-import { type CronjobConfig, loadConfig } from './config.js';
+import { type UserCronjobConfig, loadConfig } from './config.js';
 import { log, tryGlobSync } from './utils.js';
 import { runTask, stopTask } from './cron/task.js';
 import { shouldRun } from './syntax/job.js';
 import { run } from './run.js';
+import { initialize } from './initialize.js';
 
-export const cronjob = (rawConfig: Partial<CronjobConfig>) => {
+export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
   try {
     const config = loadConfig(rawConfig);
     log(`Config loaded: ${JSON.stringify(config)}`);
+
+    await initialize(config);
 
     const taskFn = async (now: Date) => {
       // 1、查找CRONJOB_DIR下面的所有符合suffix的文件

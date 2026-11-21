@@ -7,7 +7,7 @@
     "email": "futami16237@gmail.com"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=22.0.0"
   },
   "purpose": "npm",
   "description": "Fluxion is able to start a server that can dynamically load routers and js files. It is designed to be used to replace PHP",
@@ -56,6 +56,7 @@
   },
   "dependencies": {
     "cron-fast": "^3.15.0",
+    "cron-parser": "^5.10.6",
     "node-cron": "^4.6.0"
   }
 }
