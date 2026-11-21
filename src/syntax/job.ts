@@ -75,7 +75,7 @@ export function getJobs(cx: CronjobContext, files: FileContent[], now: Date): Jo
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     if (!f.content) {
-      log(cx, `Error loading file ${f.filepath}: ${f.error}`);
+      log.err(cx, `Error loading file ${f.filepath}: ${f.error}`);
       continue;
     }
 

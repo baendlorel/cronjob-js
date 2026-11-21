@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from 'node:process';
 
-import { Tag } from './consts.js';
 import { log } from './utils.js';
 import { CMD_NONE } from './interpreter.js';
 
@@ -28,7 +27,7 @@ export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
 
     // 运行这个文件
     if (interpreter.cmd === CMD_NONE) {
-      log(cx, `${Tag.Warn} path=${relativePath} unsupported extension`);
+      log.warn(cx, `path=${relativePath} unsupported extension`);
       return;
     }
 
@@ -47,20 +46,20 @@ export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
 
     child.on('error', (e) => {
       closeOutput();
-      log(cx, `${Tag.Error} path=${relativePath} pid=${child.pid ?? '-1'}`, e);
+      log.err(cx, `path=${relativePath} pid=${child.pid ?? '-1'}`, e);
     });
     child.on('spawn', () => {
       closeOutput();
-      log(cx, `${Tag.Spawned} path=${relativePath} pid=${child.pid ?? '-1'}`);
+      log.spawn(cx, `path=${relativePath} pid=${child.pid ?? '-1'}`);
     });
     child.on('exit', (code, signal) => {
       closeOutput();
-      log(cx, `${Tag.Exit} path=${relativePath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
+      log.exit(cx, `path=${relativePath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
     });
     child.unref();
   } catch (e) {
     closeOutput();
     // spawn 之前的异常（mkdir/openSync/jobcwd 等）也要进主日志，否则无法定位
-    log(cx, `${Tag.Error} path=${relativePath} pid=-1`, e);
+    log.err(cx, `path=${relativePath} pid=-1`, e);
   }
 }

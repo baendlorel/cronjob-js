@@ -14,15 +14,15 @@ let lock: net.Server | null = null;
  */
 const orTsx = (cx: CronjobContext) => {
   if (!hasTsx) {
-    log(cx, `[Warn] 'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
+    log.warn(cx, `'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
   }
 };
 
 const orPython = (cx: CronjobContext) => {
   if (pythonCmd) {
-    log(cx, `[Info] python available, .py files will be run by ${pythonCmd}`);
+    log.info(cx, `python available, .py files will be run by ${pythonCmd}`);
   } else {
-    log(cx, '[Warn] python not available, .py jobs will be ignored');
+    log.warn(cx, 'python not available, .py jobs will be ignored');
   }
 };
 

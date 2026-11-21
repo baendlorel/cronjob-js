@@ -15,7 +15,7 @@ import { initialize } from './initialize.js';
 export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<TaskController>;
 export async function cronjob(_config?: Partial<UserCronjobConfig>) {
   const config = loadConfig(_config);
-  log(config, `Config loaded: ${JSON.stringify(config)}`);
+  log.info(config, `Config loaded: ${JSON.stringify(config)}`);
 
   await initialize(config);
 
@@ -26,12 +26,12 @@ export async function cronjob(_config?: Partial<UserCronjobConfig>) {
       return;
     }
     if (filepaths.length === 0) {
-      log(config, `No scripts found.`);
+      log.info(config, `No scripts found.`);
       return;
     }
 
     const performanceNow = performance.now();
-    log(config, `Start`);
+    log.debug(config, `Start`);
 
     const files = await loadFiles(filepaths);
     const jobs = await getJobs(config, files, now);
@@ -42,12 +42,12 @@ export async function cronjob(_config?: Partial<UserCronjobConfig>) {
       }
     }
 
-    log(config, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
+    log.debug(config, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
   };
 
   const task = runTask(config, taskFn);
 
-  log(config, `Cronjob start! pid=${process.pid}`);
+  log.info(config, `Cronjob start! pid=${process.pid}`);
 
   return task;
 }
