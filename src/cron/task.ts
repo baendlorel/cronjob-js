@@ -9,7 +9,7 @@ export function runTask(config: CronjobConfig, fn: (now: Date) => void) {
 
   setTimeout(() => {
     if (running) {
-      fn(now);
+      fn(new Date());
       runTask(config, fn);
     }
   }, nextMinute.getTime() - now.getTime());

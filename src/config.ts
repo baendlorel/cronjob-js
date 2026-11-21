@@ -20,6 +20,14 @@ interface UserCronjobConfig {
   include: string[];
 
   /**
+   * Glob expressions to exclude cronjob scripts.
+   * - Will be passed to fs.glob with the `ignore` option.
+   *
+   * default value is `['node_modules/','.git','.vscode','.claude','__pycache__']`
+   */
+  exclude: string[];
+
+  /**
    * Affects log time and cron parsing.
    *
    * default value is `"Asia/Shanghai"`
@@ -48,6 +56,7 @@ export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfi
     logDir = dir,
     jobcwd = dir,
     include = ['**/*.{ts,js,sh}'],
+    exclude = ['node_modules/', '.git', '.vscode', '.claude', '__pycache__'],
     timezone = 'Asia/Shanghai',
   } = Object(rawConfig) as UserCronjobConfig;
 
@@ -65,11 +74,15 @@ export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfi
   if (!Array.isArray(include) || include.some((pattern) => typeof pattern !== 'string')) {
     throw new TypeError('`include` must be an array of strings');
   }
+  if (!Array.isArray(exclude) || exclude.some((pattern) => typeof pattern !== 'string')) {
+    throw new TypeError('`exclude` must be an array of strings');
+  }
 
   cronjobConfig.dir = dir;
   cronjobConfig.logDir = logDir;
   cronjobConfig.jobcwd = typeof jobcwd === 'function' ? jobcwd : () => jobcwd;
   cronjobConfig.include = include;
+  cronjobConfig.exclude = exclude;
   cronjobConfig.timezone = timezone;
   cronjobConfig.timeFormat = new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
