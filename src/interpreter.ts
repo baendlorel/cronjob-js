@@ -19,10 +19,12 @@ export function detectCommand(cmd: string) {
 // 增加一个尝试找到python运行时的脚本
 export const CMD_NONE = 'none';
 
+const tsCmd = detectCommand('tsx') ?? detectCommand('ts-node') ?? process.execPath;
+
 const interpreters: Record<string, Interpreter> = {
   '.ts': {
-    cmd: process.execPath,
-    args: detectCommand('tsx') ? ['--import', 'tsx'] : [],
+    cmd: tsCmd,
+    args: [],
   },
   '.js': {
     cmd: process.execPath,
@@ -42,7 +44,7 @@ const interpreters: Record<string, Interpreter> = {
   },
 };
 
-export const hasTsx = interpreters['.ts'].args.length > 0;
+export const hasTsx = tsCmd !== null;
 export const pythonCmd = interpreters['.py'].cmd;
 
 export function getDefaultInterpreter(ext: string) {

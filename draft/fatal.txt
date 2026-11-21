@@ -40,6 +40,16 @@ F1. 定时器把"调度时刻"当成"本轮时间"，任务必然晚一分钟，
   唯独 fn(now) 用的是旧值）。
 ℹ️已改为new Date()
 
+✅ 已修复并验证（2026-11-21，commit 3eee1ef + 补充修复）
+  3eee1ef 把回调里的 fn(now) 改成 fn(new Date())，主症状（晚一分钟、同一分钟判定两次）已消失。
+  但复核时发现原修法不完整：定时器会早于分钟边界触发（实测 WSL 下 -360~-460ms），
+  此时 new Date() 仍属上一分钟，下一轮又会把边界算到同一分钟，导致同一分钟连跑两次。
+  实测（只加 new Date()、不加边界判断）：
+    09:06:00 / 09:06:58 / 09:07:00  → 09:07 这一分钟仍然跑了两遍
+  已补 [src/cron/task.ts:10-19]：回调触发时若 Date.now() < 边界，则重新排到边界再跑。
+  补丁后实测 3 分钟：
+    09:18:00.017 Start / 09:19:00.005 / 09:20:00.018，每分钟恰好一次，任务日志同频。
+
 
 ────────────────────────────────────────
 F2. glob 返回的是相对路径，后续 readFile/spawn 全部按 cwd 解析；配置 dir 后一个任务都跑不了
@@ -64,6 +74,12 @@ F2. glob 返回的是相对路径，后续 readFile/spawn 全部按 cwd 解析�
 
 ℹ️已改为返回绝对路径
 
+✅ 已修复并验证（commit 3eee1ef）
+  tryGlobSync 现在 map(path.resolve(config.dir, v))，顺带加了 config.exclude。
+  实测 dir='jobs' 从上一级目录启动：readFile 成功，spawn 正常，
+  日志路径 logs/sub/a.js.log 也正确（path.relative 拿到绝对路径后结果正确）。
+  Node 22 上同样通过（exclude 传的就是 glob 原生选项）。
+
 ────────────────────────────────────────
 F3. shebang 整行被当成可执行文件名
 ────────────────────────────────────────
@@ -84,6 +100,21 @@ F3. shebang 整行被当成可执行文件名
   或者干脆不采信 shebang，统一用默认解释器，只把 shebang 当作"允许出现在第一行"的标记。
 
 ℹ️我需要一个简单的函数，用来把shebang转换为cmd。
+
+✅ 已修复并验证（工作区未提交）
+  [src/syntax/shebang.ts] getShebang 现在返回 { cmd, args }：
+  剥掉 '#!' 后按空白切成 cmd + args，'#!' 后面什么都没有仍返回 null。
+  [src/syntax/extract.ts:119] 直接用这个结果替换默认解释器。
+
+  实测：
+    #!/usr/bin/env node      → spawn envnode.js 成功，日志 "envnode ran"
+    #!/bin/bash -e           → args 正确切分，脚本正常执行
+    #!/usr/bin/python3       → 正常
+    #!/usr/bin/env tsx       → 正常（tsx 可用时）
+    #!/bin/bash              → 正常
+
+  注意：/usr/bin/env 本身只是按 PATH 转发的启动器，直接当 cmd 是正确语义，
+  不用特判。真正的坑是原来把整行 "usr/bin/env node" 当成一个文件名。
 
 ────────────────────────────────────────
 F4. 用 PATH 检测 tsx，却用模块解析加载 tsx；.ts 任务全部失败且没有告警
@@ -117,6 +148,21 @@ F4. 用 PATH 检测 tsx，却用模块解析加载 tsx；.ts 任务全部失败�
   通过才算可用。
 
 ℹ️帮我改成cmd='tsx'这种的。
+
+✅ 已修复并验证（工作区未提交）
+  [src/interpreter.ts] .ts 现在 cmd = detectCommand('tsx') ?? process.execPath，args = []；
+  hasTsx 改为 tsx !== null。不再用 --import tsx，检测和启动走同一条 PATH，不存在分裂。
+
+  实测：
+  - 有 tsx（PATH 上）：cmd='tsx'，.ts 任务确实被 tsx 拉起；
+  - 无 tsx（PATH 去掉 tsx）：回退 node 直接跑，Node 22 / 26 下装类型注释的 .ts 都能跑通；
+  - tsx 存在但自身坏了（本机全局 tsx 装了 win32 的 esbuild，
+    在 WSL 下直接跑 `tsx types.ts` 也报同样错误）——这属于环境问题，
+  不是 runner 的问题，换一台正常的机器即可。
+
+  遗留（不在 F4 范围，见 F8/F9 仍未修）：
+  hasTsx 的告警在 initialize() 里，而 initialize() 仍未被调用，
+  所以"tsx 缺失"这条提示目前还是不会打印。
 
 ────────────────────────────────────────
 F5. 同一文件命中多条 @cron 只 spawn 一次；run() 完全忽略 count

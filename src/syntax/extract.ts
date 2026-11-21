@@ -116,10 +116,7 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
     return null;
   }
 
-  let interpreter = getDefaultInterpreter(ext);
-  if (shebang) {
-    interpreter = { ...interpreter, cmd: shebang, args: [] };
-  }
+  const interpreter = shebang ?? getDefaultInterpreter(ext);
 
   return { list, interpreter, filepath };
 }
