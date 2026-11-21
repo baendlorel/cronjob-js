@@ -1,12 +1,14 @@
 import type { CronGroupItem, JobItem } from '../types/job.js';
 import type { CronExpression } from 'cron-parser';
+import type { CronjobConfig } from '../config.js';
+
 import { extname } from 'node:path';
 import { type CronBlockMaker, Marker } from '../consts.js';
 import { parseExp } from '../cron/parse.js';
 import { log } from '../utils.js';
+import { getDefaultInterpreter } from '../interpreter.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
-import { getDefaultInterpreter } from '../interpreter.js';
 
 /**
  * 从一行文本中提取带标记的 cron 表达式
@@ -17,6 +19,7 @@ import { getDefaultInterpreter } from '../interpreter.js';
  * @param filepath 文件路径，用于日志输出
  */
 export function extractCron(
+  config: CronjobConfig,
   trimmedLine: string,
   inBlock: boolean,
   filepath: string,
@@ -46,13 +49,13 @@ export function extractCron(
 
   //! 不支持6个位的
   const sixExpStr = tokens.slice(0, 6).join(' ');
-  const sixExp = parseExp(sixExpStr);
+  const sixExp = parseExp(config, sixExpStr);
   if (!sixExp) {
     log(`Error: Invalid six-field cron expression: ${sixExpStr}`);
   }
 
   // 直接返回5位的解析结果
-  return parseExp(tokens.slice(0, 5).join(' '));
+  return parseExp(config, tokens.slice(0, 5).join(' '));
 }
 
 /**
@@ -62,7 +65,7 @@ export function extractCron(
  * @param filepath 文件路径，用于日志输出
  * @param lines 文件内容的每一行
  */
-export function getJobItem(filepath: string, lines: string[]): JobItem | null {
+export function getJobItem(config: CronjobConfig, filepath: string, lines: string[]): JobItem | null {
   const ext = extname(filepath);
   const allowFn = getAllowFn(ext);
 
@@ -96,7 +99,7 @@ export function getJobItem(filepath: string, lines: string[]): JobItem | null {
   let inCronBlock = false;
   let group = 0;
   for (const line of lines) {
-    const cron = extractCron(line, inCronBlock, filepath);
+    const cron = extractCron(config, line, inCronBlock, filepath);
     // 忽略空的
     if (!cron) {
       continue;

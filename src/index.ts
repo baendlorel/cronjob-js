@@ -34,7 +34,7 @@ export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
       log(`Start`);
 
       const files = await loadFiles(filepaths);
-      const jobs = await getJobs(files, now);
+      const jobs = await getJobs(config, files, now);
 
       for (let i = 0; i < jobs.length; i++) {
         for (let n = 0; n < jobs[i].count; n++) {
