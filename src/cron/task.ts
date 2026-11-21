@@ -22,7 +22,7 @@ const nextMinuteBoundary = (from: Date) => {
  * - 状态全部放在 cx.jobState / cx.jobTimer 里，本函数不持有模块级状态
  * - 每次调度都重新读 cx.jobState，因此 stop/resume 在任意时刻都生效
  */
-export function runTask(cx: CronjobContext, fn: (now: Date) => void): TaskController {
+export function runTask(cx: CronjobContext, fn: (now: Date) => void | Promise<void>): TaskController {
   const schedule = () => {
     if (cx.jobState !== CronjobState.Running) {
       return;
@@ -48,8 +48,19 @@ export function runTask(cx: CronjobContext, fn: (now: Date) => void): TaskContro
 
       const noSecondDate = new Date();
       noSecondDate.setSeconds(0, 0);
-      fn(noSecondDate);
+
+      // 先排下一轮：fn 抛错或异步 reject 都不能打断调度链（否则整条链就断了）
       schedule();
+
+      try {
+        const ret = fn(noSecondDate);
+        // 只用一条 Error 记录，不重试、不告警，等下一分钟即可
+        if (ret && typeof ret.catch === 'function') {
+          ret.catch((e) => cx.log.err(`Task tick failed:`, e));
+        }
+      } catch (e) {
+        cx.log.err(`Task tick failed:`, e);
+      }
     }, nextMinute.getTime() - now.getTime());
   };
 

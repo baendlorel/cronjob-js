@@ -1,5 +1,5 @@
 cronjob-runner 问题清单
-最后更新：2026-11-21（第四轮，logger / cron-parser / cx 重构之后）
+最后更新：2026-11-21（第五轮，list 重写 + F21 修复之后）
 检查版本：main @ 79c755f，工作区干净
 运行环境：Node v26.13.1 / WSL2
 
@@ -62,9 +62,27 @@ cronjob-runner 问题清单
 
 ✅ F17 example/main.js 无参调用 cronjob() 编译不过 → 参数已可选。
 
+✅ F18 src/list.ts 已完全失效
+   按 TODO 重写为 crontab -l 风格，组合现有函数式模块：
+     tryGlobSync → loadFiles → getJobItem → parseExp → next()
+   输出：下次运行时间 / 表达式（块内带 [group]）/ 相对路径 / 实际命令。
+   实测（含嵌套目录、@cronbegin 块、无 cron 文件、秒级文件）输出正确。
+   每条表达式在展示前重新 parse（next() 会推进内部游标，不能复用共享对象）。
+   tsc 全绿，list 已从包导出，也支持 `tsx src/list.ts [dir]` 直接运行。
+
+✅ F19 日志标记与 CLAUDE.md 约定不一致
+   已改 CLAUDE.md：TAG 统一为 [INFO]/[WARN]/[ERROR]/[SPAWN]/[EXIT]/[DEBUG]，
+   并补上三个生命周期事件的确切格式、相对路径约定，以及 <logDir>/<相对路径>.log。
+
 ✅ F20 run() 的异常不进主日志
    run.ts 的 catch 现在走 cx.log.err(`path=<相对路径> pid=-1`, e)。
    spawn 前的异常（mkdir / openSync / jobcwd 抛错）都能在主日志定位。
+
+✅ F21 taskFn 是 async，runTask 调用它时不 await 也不 catch
+   runTask 现在接受 `void | Promise<void>`：先排下一轮再调用 fn，
+   同步异常和 Promise reject 都只记一条 Error，不打断调度链。
+   实测：让 fn 每分钟 reject 一次，日志各一条 [ERROR]，unhandledRejections=0，
+        两分钟后仍在正常 tick（ticks=2）。
 
 ✅ F22 package.json 元信息还是 fluxion 的
    name=crontab-js，description/description_zh 重写，homepage/repository/bugs 指向本仓库，
@@ -74,30 +92,9 @@ cronjob-runner 问题清单
 ✅ 附 全局 log 单例 → 已改为 cx.log.*，实现可经 config.write 替换。
 
 
-══ 未修复 ══════════════════════════════
+（暂无）
 
-🟡 F18 src/list.ts 已完全失效
-   现状（npx tsc --noEmit，唯一编译不过的文件）：
-     src/list.ts(7,15):  Expected 1 arguments, but got 0   ← tryGlobSync 需要 cx
-     src/list.ts(12,16): Expected 3 arguments, but got 1   ← getJobItem 需要 cx/filepath/lines
-     src/list.ts(13,21): Property 'length' does not exist on type 'JobItem'
-     src/list.ts(17,32): Type 'JobItem' must have a '[Symbol.iterator]()' method
-     src/list.ts(18,49): Cannot find name 'nextRun'      ← 随 cron-fast 一起删掉了
-   不在构建入口，不影响运行，但 pnpm check 会红。
-   要么按 TODO 重写成 crontab -l 的效果，要么直接删掉。
-
-🟡 F19 日志标记与 CLAUDE.md 约定不一致
-   实际（consts.ts Tag）：[INFO] [SPAWN] [ERROR] [WARN] [EXIT] [DEBUG]
-   CLAUDE.md：JOBSPWD / JOBERR / JOBEXIT 三个事件
-   path 已是相对路径（这部分已对齐）。
-   现在 README 描述的是实现现状，只有 CLAUDE.md 落后。二选一即可，代价都很低。
-
-🟡 F21 taskFn 是 async，runTask 调用它时不 await 也不 catch
-   位置：src/index.ts:28（async taskFn）、src/cron/task.ts:51（fn(noSecondDate) 直接调用）
-   实测：让 taskFn 抛错，进程报 UNHANDLED REJECTION（Node 默认会退出）。
-   getJobs / loadFiles 一旦 reject 就会走到这条路径。
-   修法：runTask 的 fn 返回值包一层 catch；或 taskFn 内部整体 try/catch。
-   注意不要在 runner 层做重试/告警——只记录一条并等下一分钟即可，与设计哲学一致。
+所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 环境问题（非代码） ══════════════════════════════
