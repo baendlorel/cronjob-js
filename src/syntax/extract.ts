@@ -47,11 +47,17 @@ export function extractCron(
     .split(/\s+/)
     .filter(Boolean);
 
+  if (tokens.length < 5) {
+    log(cx, `Error: Invalid cron expression: ${tokens.join(' ')} in file: ${filepath}`);
+    return null;
+  }
+
   //! 不支持6个位的
   const sixExpStr = tokens.slice(0, 6).join(' ');
   const sixExp = parseExp(cx, sixExpStr);
   if (!sixExp) {
     log(cx, `Error: Invalid six-field cron expression: ${sixExpStr}`);
+    return null;
   }
 
   // 直接返回5位的解析结果
