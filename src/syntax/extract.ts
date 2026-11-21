@@ -1,6 +1,6 @@
 import type { CronGroupItem, JobItem } from '../types/job.js';
 import type { CronExpression } from 'cron-parser';
-import type { CronjobConfig } from '../config.js';
+import type { CronjobContext } from '../config.js';
 
 import { extname } from 'node:path';
 import { type CronBlockMaker, Marker } from '../consts.js';
@@ -19,7 +19,7 @@ import { getShebang } from './shebang.js';
  * @param filepath 文件路径，用于日志输出
  */
 export function extractCron(
-  config: CronjobConfig,
+  config: CronjobContext,
   trimmedLine: string,
   inBlock: boolean,
   filepath: string,
@@ -65,7 +65,7 @@ export function extractCron(
  * @param filepath 文件路径，用于日志输出
  * @param lines 文件内容的每一行
  */
-export function getJobItem(config: CronjobConfig, filepath: string, lines: string[]): JobItem | null {
+export function getJobItem(config: CronjobContext, filepath: string, lines: string[]): JobItem | null {
   const ext = extname(filepath);
   const allowFn = getAllowFn(ext);
 

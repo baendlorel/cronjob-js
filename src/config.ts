@@ -1,3 +1,5 @@
+import { CronjobState } from './consts.js';
+
 export interface UserCronjobConfig {
   /**
    * Will scan this directory for cronjob scripts
@@ -43,7 +45,7 @@ export interface UserCronjobConfig {
   jobcwd: string | ((scriptPath: string) => string);
 }
 
-export interface CronjobConfig extends UserCronjobConfig {
+export interface CronjobContext extends UserCronjobConfig {
   timeFormat: Intl.DateTimeFormat;
 
   /**
@@ -51,9 +53,15 @@ export interface CronjobConfig extends UserCronjobConfig {
    */
   timezoneConfig: { timezone: string; tz: string };
   jobcwd: (scriptPath: string) => string;
+
+  // # 这是增加的字段
+  /**
+   * The current state of the cronjob.
+   */
+  jobState: CronjobState;
 }
 
-export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfig {
+export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobContext {
   const {
     dir = process.cwd(),
     logDir = dir,
@@ -100,5 +108,6 @@ export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfi
       hour12: false,
       timeZone: timezone,
     }),
+    jobState: CronjobState.Running,
   };
 }

@@ -1,8 +1,8 @@
-import type { CronjobConfig } from '../config.js';
+import type { CronjobContext } from '../config.js';
 
 let running = true;
 
-export function runTask(config: CronjobConfig, fn: (now: Date) => void) {
+export function runTask(config: CronjobContext, fn: (now: Date) => void) {
   const now = new Date();
   const nextMinute = new Date(now.getTime() + 60000);
   nextMinute.setSeconds(0, 0);

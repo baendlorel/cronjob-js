@@ -5,6 +5,12 @@ export const enum LogTag {
   Exit = '[Exit]',
 }
 
+export const enum CronjobState {
+  Running,
+  Paused,
+  Stopped,
+}
+
 export const DEV_FLAG = '--dev';
 
 export namespace Marker {

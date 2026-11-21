@@ -1,5 +1,5 @@
 import type { Job } from './types/job.js';
-import type { CronjobConfig } from './config.js';
+import type { CronjobContext } from './config.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { LogTag } from './consts.js';
 import { log } from './utils.js';
 import { CMD_NONE } from './interpreter.js';
 
-export function run(config: CronjobConfig, { filepath, interpreter }: Job) {
+export function run(config: CronjobContext, { filepath, interpreter }: Job) {
   let output: number | null = null;
   const closeOutput = () => {
     if (output !== null) {

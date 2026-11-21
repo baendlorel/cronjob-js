@@ -1,5 +1,5 @@
 import type { Job, JobItem } from '../types/job.js';
-import type { CronjobConfig } from '../config.js';
+import type { CronjobContext } from '../config.js';
 
 import { readFile } from 'node:fs/promises';
 import { log } from '../utils.js';
@@ -40,7 +40,7 @@ export async function loadFiles(filepaths: string[]): Promise<Array<FileContent>
  *
  * ! 仅用于同一个filepath
  */
-export function getMatchedJob(config: CronjobConfig, item: JobItem, now: Date): Job {
+export function getMatchedJob(config: CronjobContext, item: JobItem, now: Date): Job {
   let count = 0;
   const set = new Set<number>();
   for (let i = 0; i < item.flatCronGroups.length; i++) {
@@ -62,7 +62,7 @@ export function getMatchedJob(config: CronjobConfig, item: JobItem, now: Date): 
  *
  * @returns 要跑的 cron，要跑多少次；
  */
-export function getJobs(config: CronjobConfig, files: FileContent[], now: Date): Job[] {
+export function getJobs(config: CronjobContext, files: FileContent[], now: Date): Job[] {
   const jobs: Job[] = [];
 
   for (let i = 0; i < files.length; i++) {
