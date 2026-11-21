@@ -7,7 +7,6 @@
     "types": ["node"],
 
     "checkJs": true,
-    "noEmit": true,
     "noImplicitAny": false,
 
     "jsx": "preserve",
@@ -17,5 +16,5 @@
       "@shared/*": ["./web/_shared/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.js"]
+  "include": ["**/*.ts"]
 }

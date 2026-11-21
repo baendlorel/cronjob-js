@@ -1,6 +1,6 @@
 {
   "name": "crontab-js",
-  "version": "0.1.4",
+  "version": "0.0.1",
   "description": "A minimal crontab for JavaScript and TypeScript: write a 5-field cron expression in a script's header comment, and the script is spawned when it matches. Complete TypeScript types included.",
   "description_zh": "极简的 JS 版 crontab：把 5 段 cron 写在脚本头部注释里，到点就运行；完整 TS 类型支持。",
   "type": "module",
@@ -51,6 +51,7 @@
   ],
   "scripts": {
     "build": "tsdown",
+    "buildtsc": "tsc -p tsconfig.build.json",
     "pub": "pnpm run build && tsx ./scripts/index.ts --publish",
     "check": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint ."
