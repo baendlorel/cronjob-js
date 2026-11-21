@@ -1,0 +1,274 @@
+cronjob-runner 致命问题清单
+检查时间：2026-11-21
+检查版本：main @ 57ae752（工作区干净）
+运行环境：Node v26.13.1 / WSL2
+
+以下每一条都实际跑过复现，不是静态猜测。
+复现脚本用的都是 dist 构建产物 + /tmp 下的临时任务目录，没有改动仓库。
+
+
+────────────────────────────────────────
+F1. 定时器把"调度时刻"当成"本轮时间"，任务必然晚一分钟，且会重复跑
+────────────────────────────────────────
+位置：
+  src/cron/task.ts:5-16
+  src/index.ts:33（now 直接传给 shouldRun）
+
+原因：
+  runTask() 在"排下一轮定时器"时取 const now = new Date()，
+  但真正到点回调时，传给 fn 的仍是上一轮排定时器时抓的那个 now。
+  setTimeout 回调里没有重新取时间。
+
+实测（node src/cron/task.ts 直接跑，3 分钟）：
+  tick wall=00:25:00.046  now=00:24:48.953  stale=11.09s
+  tick wall=00:25:58.329  now=00:25:00.061  stale=58.27s
+  tick wall=00:26:00.015  now=00:25:58.333  stale=1.68s
+  tick wall=00:26:58.334  now=00:26:00.015  stale=58.32s
+  tick wall=00:27:00.047  now=00:26:58.337  stale=1.71s
+
+后果：
+  a) "00:25:00" 这一分钟的任务，实际在 00:25:58 甚至 00:26:00 才判定；
+     也就是说所有任务至少晚约 1 分钟。
+  b) 同一分钟会被判定两次（见上面 00:25 出现两次），任务重复执行。
+     实测：// @cron 15 * * * * 的任务在 08:15:58 和 08:16:00 各跑了一次。
+  c) 依赖事件循环唤醒时机（WSL/负载高时定时器会早/晚一两秒），
+     行为不可复现。
+
+修法：
+  setTimeout 回调内部取 new Date() 作为本轮 now，不要复用排定时器时的 now。
+  下一轮的分钟边界也要用回调内的当前时间重新算（递归调用已经每次都重算了，
+  唯独 fn(now) 用的是旧值）。
+
+
+────────────────────────────────────────
+F2. glob 返回的是相对路径，后续 readFile/spawn 全部按 cwd 解析；配置 dir 后一个任务都跑不了
+────────────────────────────────────────
+位置：
+  src/utils.ts:8-16        fs.globSync(include, { cwd: config.dir }) 返回 'sub/a.js' 这种相对路径
+  src/syntax/job.ts:13-16  readFile(filepath)  ← 按 process.cwd() 解析
+  src/run.ts:22            path.relative(config.dir, filepath)
+  src/run.ts:37,46         spawn args 和 jobcwd 都拿到相对路径
+
+实测（dir='jobs', logDir='logs'，从上一级目录启动）：
+  Config loaded: {"dir":"jobs","logDir":"logs",...}
+  Error loading file sub/a.js: ENOENT: no such file or directory, open 'sub/a.js'
+  → 每分钟都是这句话，任务永远不跑。
+
+同理 dir='/tmp/xxx/jobs' 绝对路径、但 cwd 不是该目录时，同样 ENOENT。
+只有 dir 恰好等于 cwd（默认值）时整套流程才成立。
+
+修法：
+  glob 之后立刻 path.resolve(config.dir, p)，或者 readFile(path.join(config.dir, p))。
+  建议在 tryGlobSync 里就返回绝对路径，下游全部按绝对路径处理。
+
+
+────────────────────────────────────────
+F3. shebang 整行被当成可执行文件名
+────────────────────────────────────────
+位置：
+  src/syntax/shebang.ts:5           返回 '#!' 之后的整串
+  src/syntax/extract.ts:119-122     cmd = shebang 整串
+
+实测（a.js 首行 #!/usr/bin/env node）：
+  [Error] path=a.js pid=-1 Error: spawn /usr/bin/env node ENOENT
+  → 任务从不执行，a.js.log 为空。
+
+后果：
+  #!/usr/bin/env node 这个最常见写法 100% 跑不起来；
+  #!/bin/bash 这种能跑只是因为整串恰好就是一个可执行文件。
+
+修法：
+  shebang 解析成 cmd + args（遇到 /usr/bin/env 要跳过它、取后面的命令）；
+  或者干脆不采信 shebang，统一用默认解释器，只把 shebang 当作"允许出现在第一行"的标记。
+
+
+────────────────────────────────────────
+F4. 用 PATH 检测 tsx，却用模块解析加载 tsx；.ts 任务全部失败且没有告警
+────────────────────────────────────────
+位置：
+  src/interpreter.ts:22-26   detectCommand('tsx') → node --import tsx
+  src/initialize.ts:15-19    orTsx() 的告警分支（而且 initialize 根本没被调用，见 F8）
+
+实测（.ts 任务，系统 PATH 上有 tsx）：
+  [Spawned] path=t.ts pid=...
+  [Exit] path=t.ts pid=... code=1
+  日志内容：Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'tsx' imported from /tmp/cjshe/proj/jobs/
+
+原因：
+  spawnSync('tsx') 只能证明 PATH 上有可执行文件（全局装的 tsx 就是这种），
+  但子进程里 'tsx' 是作为模块从 cwd 往上找 node_modules 的。
+  全局安装的 tsx 不可被 import，于是 --import tsx 必然失败。
+  同时 hasTsx 为 true，所以连 [Warn] 都不会打。
+
+后果：
+  "tsx 缺失只警告，.ts 回退 node" 这条约定在两种情况下都不成立：
+  - PATH 有、模块找不到：静默失败；
+  - PATH 没有：args=[] 纯 node 跑 .ts，语法不兼容时同样静默失败。
+
+修法：
+  二选一，并让告警真实生效：
+  a) 直接 spawn tsx 可执行文件：cmd='tsx', args=[filepath]；
+  b) 用 createRequire(import.meta.url).resolve('tsx') 拿到绝对路径，
+     再传 --import <绝对路径>。
+  检测阶段应当真的执行一次（例如 spawnSync(cmd, ['--import', 'tsx', '-e', ''])），
+  通过才算可用。
+
+
+────────────────────────────────────────
+F5. 同一文件命中多条 @cron 只 spawn 一次；run() 完全忽略 count
+────────────────────────────────────────
+位置：
+  src/index.ts:35-37    for 每个 job 调一次 run，没有按 count 循环
+  src/syntax/job.ts:64-79  辛苦算出的 count 没有任何消费者
+  src/types/job.ts:43-45
+
+实测（文件里写两条 // @cron * * * * *）：
+  主日志每分钟只有一条 [Spawned]
+  任务日志每分钟只有一行
+  → 本该 spawn 2 次，实际 1 次。
+
+这直接违反 CLAUDE.md：
+  "块外每条 @cron 独立调度，同一分钟命中几条就 spawn 几次（group=0）"
+
+修法：
+  for (let n = 0; n < job.count; n++) run(config, job);
+
+
+────────────────────────────────────────
+F6. @cronend 之后 group 不归零，块后的独立 @cron 行被并入块
+────────────────────────────────────────
+位置：
+  src/syntax/extract.ts:90-111   group 只在 BEGIN 时 ++，END 时只改 inCronBlock
+
+实测：
+  输入：
+    // @cronbegin
+    // @cron 0 9 * * *
+    // @cronend
+    // @cron 0 9 * * *      ← 块外，应为 group 0
+    // @cron 0 9 * * *      ← 块外，应为 group 0
+  输出：
+    list = [ {exp:" 0 9 * * *", group:1},
+             {exp:" 0 9 * * *", group:1},
+             {exp:" 0 9 * * *", group:1} ]
+
+后果：
+  块后面的所有独立 @cron 行都挂在最后一个块的分组上，按 group 去重后只算 1 次。
+  修好 F5 之后这条会让"本该跑 3 次"变成"只跑 1 次"，属于同一类漏跑。
+
+修法：
+  END 时把 group 复位为 0；块的编号用单独的计数器，不与"块外"共用同一个变量。
+
+
+────────────────────────────────────────
+F7. @cron 后面的说明文字会让整条配置被静默丢弃
+────────────────────────────────────────
+位置：
+  src/syntax/extract.ts:35-38   exp 从标记后一直切到行尾，整串交给 isValid
+
+实测：
+  isValid(' 0 9 * * * 每天九点') === false
+  → extractCron 返回 null，这条 @cron 消失，不报错、不告警。
+
+后果：
+  CLAUDE.md 明确写"标记后取 5 段，之后是说明文字"，
+  按约定写的配置反而不会调度。
+
+修法：
+  按空白切成 token，只取前 5 段再 isValid；或先用正则匹配 5 段。
+  注意 cron-fast 不接受 6 段（秒级），别把说明里的数字并进去。
+
+
+────────────────────────────────────────
+F8. engines 声明 Node >=16，实际依赖 Node 22+ 的 fs.globSync；旧版本上永远静默空转
+────────────────────────────────────────
+位置：
+  package.json:9-10   "node": ">=16.0.0"
+  src/utils.ts:11     fs.globSync（Node 22 才稳定）
+  node_modules/cron-fast/package.json 本身要求 >=22
+
+后果（Node 16-21）：
+  tryGlobSync 捕获到 "fs.globSync is not a function"，
+  每分钟打一条 "Error while globbing scripts."，然后 return null，
+  进程看似正常，任务一条都不会跑。
+
+修法：
+  engines 改 >=22（与 tsdown target node24、cron-fast 的要求一致）；
+  或在启动时硬性检查版本并直接退出。
+
+
+────────────────────────────────────────
+F9. 单实例检查 initialize() 从未被调用
+────────────────────────────────────────
+位置：
+  src/initialize.ts:59   export const initialize
+  全仓库 grep 只有定义处，没有任何 import/调用（index.ts 没有）。
+
+后果：
+  - 没有单实例锁：pm2 配错/手动多开时两个 runner 同时扫同一批脚本，任务双倍执行；
+  - orTsx/orPython 的告警永远不会打印（与 F4 叠加，问题完全不可见）；
+  - ensureDir 也不会执行。
+
+修法：
+  cronjob() 里 await initialize(config)（注意 cronjob 目前是同步函数，
+  要么改成 async，要么把锁的获取同步化/用顶层 await）。
+
+
+────────────────────────────────────────
+F10. 主日志格式与 CLAUDE.md 的约定不一致
+────────────────────────────────────────
+位置：
+  src/consts.ts:1-4      LogTag = [Spawned] / [Error] / [Exit]
+  src/run.ts:51-59
+  CLAUDE.md 约定：JOBSPWD / JOBERR / JOBEXIT，path=<相对路径>
+
+实测日志：
+  2026/11/21 08:10:58.358 [Spawned] path=multi.js pid=116930
+  2026/11/21 08:10:58.379 [Exit] path=multi.js pid=116930 code=0 signal=null
+
+问题：
+  - 事件名不符合约定，靠日志做人工巡检/脚本解析会全部对不上；
+  - path 现在是 glob 的返回值（见 F2，可能是相对路径），不是"相对 dir"的路径；
+  - 主日志里没有 "JOBSPWD <cwd>" 事件，无法确认任务实际工作目录。
+
+说明：
+  如果这份约定已经改过，请同步更新 CLAUDE.md；否则按约定改回来。
+  日志是这套设计里唯一的可观测手段，格式漂移等同于没有日志。
+
+
+────────────────────────────────────────
+F11. 公开 API 的类型签名与文档/示例不符，示例代码编译不过
+────────────────────────────────────────
+位置：
+  src/config.ts:45-52    loadConfig(rawConfig?: Partial<UserCronjobConfig>)
+  src/index.ts:14        cronjob(rawConfig: Partial<CronjobConfig>)  ← 必填、且用内部类型
+  dist/index.d.mts       CronjobConfig 暴露给用户（含 timeFormat、jobcwd 函数）
+  example/main.js:3      cronjob()  ← 无参调用
+
+tsc 结果：
+  example/main.js(3,1): error TS2554: Expected 1 arguments, but got 0.
+
+后果：
+  默认配置（全部走默认值）是文档里的主用法，但类型上不成立；
+  用户也被迫提供一个包含 timeFormat 的 Partial<CronjobConfig>。
+
+修法：
+  导出 UserCronjobConfig，签名改成 cronjob(rawConfig?: Partial<UserCronjobConfig>)。
+
+
+────────────────────────────────────────
+附：非致命但建议顺手处理
+────────────────────────────────────────
+- src/list.ts 已与 getCronExps 的新签名脱节（tryGlobSync() 少参数、getCronExps 参数数量不对、
+  把 JobItem 当数组用），`npx tsc --noEmit` 直接报 4 个错。list.ts 未进构建入口，暂不影响运行。
+- src/utils.ts:10 有一个孤立的 ``; 语句（无害，但像调试残留）。
+- src/run.ts:21 path.parse(filepath) 的结果 parsed 从未使用。
+- src/run.ts 的 catch 只 console.error，不写主日志，也不带路径；spawn 前的异常无法从主日志定位。
+- src/index.ts 里 taskFn 是 async，但 runTask 调用它时不 await 也不 catch；
+  shouldRun 一旦 reject 就是未处理的 Promise rejection（Node 默认会退出进程）。
+- src/config.ts:43 把配置存在模块级全局常量里，log() 依赖它。
+  在 loadConfig 之前调用 log() 会因 timeFormat 为 undefined 直接抛错（当前调用顺序没触发）。
+- package.json 的 name/description/homepage/repository/files 还是 fluxion 项目的内容，
+  发布出去会是一个名字和描述都不对的包；files 里的 instruction.md/README.md 也不存在。
+- 本机 `pnpm build` 失败是因为 node_modules 里装的是 @esbuild/win32-x64，
+  在 WSL 下需要 @esbuild/linux-x64 —— 属于环境问题，不是代码问题，但会挡住 CI。
