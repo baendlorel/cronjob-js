@@ -1,9 +1,10 @@
 export const enum Tag {
-  Spawn = '[Spawn]',
-  Error = '[Error]',
-  Warn = '[Warn]',
-  Exit = '[Exit]',
-  Debug = '[Debug]',
+  Info = '[INFO]',
+  Spawn = '[SPAWN]',
+  Error = '[ERROR]',
+  Warn = '[WARN]',
+  Exit = '[EXIT]',
+  Debug = '[DEBUG]',
 }
 
 export const enum CronjobState {

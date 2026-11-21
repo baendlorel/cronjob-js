@@ -1,4 +1,4 @@
-import { CronjobState } from './consts.js';
+import { CronjobState, Tag } from './consts.js';
 
 export interface UserCronjobConfig {
   /**
@@ -43,6 +43,13 @@ export interface UserCronjobConfig {
    * default value is the same as `this.dir`
    */
   jobcwd: string | ((scriptPath: string) => string);
+
+  /**
+   * Function to write logs.
+   * @param tag The tag for the log entry.
+   * @param args The arguments to log.
+   */
+  write: (tag: Tag, ...args: any[]) => void;
 }
 
 export interface CronjobContext extends UserCronjobConfig {
@@ -61,7 +68,28 @@ export interface CronjobContext extends UserCronjobConfig {
   jobState: CronjobState;
 
   jobTimer: NodeJS.Timeout | null;
+
+  log: {
+    info: (...args: any[]) => any;
+    err: (...args: any[]) => any;
+    warn: (...args: any[]) => any;
+    spawn: (...args: any[]) => any;
+    exit: (...args: any[]) => any;
+    debug: (...args: any[]) => any;
+  };
 }
+
+const defaultWrite = (cx: CronjobContext, tag: string, args: any[]) =>
+  console.log(cx.timeFormat.format(new Date()), tag, ...args);
+
+const createLogger = (cx: CronjobContext) => ({
+  info: (...args: any[]) => cx.write(Tag.Info, ...args),
+  err: (...args: any[]) => cx.write(Tag.Error, ...args),
+  warn: (...args: any[]) => cx.write(Tag.Warn, ...args),
+  spawn: (...args: any[]) => cx.write(Tag.Spawn, ...args),
+  exit: (...args: any[]) => cx.write(Tag.Exit, ...args),
+  debug: (...args: any[]) => cx.write(Tag.Debug, ...args),
+});
 
 export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobContext {
   const {
@@ -71,6 +99,7 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     include = ['**/*.{ts,js,sh}'],
     exclude = ['node_modules/', '.git', '.vscode', '.claude', '__pycache__'],
     timezone = 'Asia/Shanghai',
+    write = (tag: Tag, ...args: any[]) => defaultWrite(cx, tag, args),
   } = Object(rawConfig) as UserCronjobConfig;
 
   if (typeof dir !== 'string') {
@@ -91,7 +120,7 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     throw new TypeError('`exclude` must be an array of strings');
   }
 
-  return {
+  const cx: CronjobContext = {
     dir,
     logDir,
     jobcwd: typeof jobcwd === 'function' ? jobcwd : () => jobcwd,
@@ -112,5 +141,11 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     }),
     jobState: CronjobState.Running,
     jobTimer: null,
+    write,
+    log: null as any,
   };
+
+  cx.log = createLogger(cx);
+
+  return cx;
 }

@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { nextRun } from 'cron-fast';
 import { tryGlobSync } from './utils.js';
 import { getJobItem } from './syntax/extract.js';
 
