@@ -53,12 +53,9 @@ export interface UserCronjobConfig {
 }
 
 export interface CronjobContext extends UserCronjobConfig {
-  timeFormat: Intl.DateTimeFormat;
-
   /**
    * 很多地方传参都是这个样子的，因此直接给一个方便不要反复创建
    */
-  timezoneConfig: { timezone: string; tz: string };
   jobcwd: (scriptPath: string) => string;
 
   // # 这是增加的字段
@@ -79,9 +76,6 @@ export interface CronjobContext extends UserCronjobConfig {
   };
 }
 
-const defaultWrite = (cx: CronjobContext, tag: string, args: any[]) =>
-  console.log(cx.timeFormat.format(new Date()), tag, ...args);
-
 const createLogger = (cx: CronjobContext) => ({
   info: (...args: any[]) => cx.write(Tag.Info, ...args),
   err: (...args: any[]) => cx.write(Tag.Error, ...args),
@@ -99,7 +93,7 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     include = ['**/*.{ts,js,sh}'],
     exclude = ['node_modules/', '.git', '.vscode', '.claude', '__pycache__'],
     timezone = 'Asia/Shanghai',
-    write = (tag: Tag, ...args: any[]) => defaultWrite(cx, tag, args),
+    write = (tag: Tag, ...args: any[]) => console.log(formatter.format(new Date()), tag, ...args),
   } = Object(rawConfig) as UserCronjobConfig;
 
   if (typeof dir !== 'string') {
@@ -108,6 +102,14 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
 
   if (typeof logDir !== 'string') {
     throw new TypeError('`logDir` must be a string');
+  }
+
+  if (typeof jobcwd !== 'string' && typeof jobcwd !== 'function') {
+    throw new TypeError('`jobcwd` must be a string or a function');
+  }
+
+  if (typeof write !== 'function') {
+    throw new TypeError('`write` must be a function');
   }
 
   // Validate timezone by attempting to create a DateTimeFormat with it
@@ -120,6 +122,18 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     throw new TypeError('`exclude` must be an array of strings');
   }
 
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+    hour12: false,
+    timeZone: timezone,
+  });
+
   const cx: CronjobContext = {
     dir,
     logDir,
@@ -127,18 +141,6 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     include,
     exclude,
     timezone,
-    timezoneConfig: { timezone, tz: timezone },
-    timeFormat: new Intl.DateTimeFormat('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      fractionalSecondDigits: 3,
-      hour12: false,
-      timeZone: timezone,
-    }),
     jobState: CronjobState.Running,
     jobTimer: null,
     write,

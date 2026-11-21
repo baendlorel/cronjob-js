@@ -2,7 +2,6 @@ import type { Job, JobItem } from '../types/job.js';
 import type { CronjobContext } from '../config.js';
 
 import { readFile } from 'node:fs/promises';
-import { log } from '../utils.js';
 import { getJobItem } from './extract.js';
 import { matches } from '../cron/parse.js';
 
@@ -75,7 +74,7 @@ export function getJobs(cx: CronjobContext, files: FileContent[], now: Date): Jo
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     if (!f.content) {
-      log.err(cx, `Error loading file ${f.filepath}: ${f.error}`);
+      cx.log.err(`Error loading file ${f.filepath}: ${f.error}`);
       continue;
     }
 

@@ -5,7 +5,6 @@ import type { CronjobContext } from '../config.js';
 import { extname } from 'node:path';
 import { type CronBlockMaker, Marker } from '../consts.js';
 import { parseExp } from '../cron/parse.js';
-import { log } from '../utils.js';
 import { getDefaultInterpreter } from '../interpreter.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
@@ -36,7 +35,7 @@ export function extractCron(
   if (markerIndex === -1) {
     if (inBlock) {
       //! 因为js多行注释会导致"*"开头的行被误认为cron表达式的一部分
-      log.warn(cx, `@cron should be used to mark cron expressions in cron blocks: ${filepath}`);
+      cx.log.warn(`@cron should be used to mark cron expressions in cron blocks: ${filepath}`);
     }
     return null;
   }
@@ -49,7 +48,7 @@ export function extractCron(
 
   // cron-parser 会把 4 段自动补齐成另一条合法表达式，必须在 parse 之前挡住
   if (tokens.length < 5) {
-    log.err(cx, `Invalid cron expression: "${tokens.join(' ')}" in file: ${filepath}`);
+    cx.log.err(`Invalid cron expression: "${tokens.join(' ')}" in file: ${filepath}`);
     return null;
   }
 
@@ -57,7 +56,7 @@ export function extractCron(
   if (tokens.length >= 6) {
     const sixExpStr = tokens.slice(0, 6).join(' ');
     if (parseExp(cx, sixExpStr)) {
-      log.err(cx, `Seconds-level cron is not supported, use 5 fields instead: "${sixExpStr}" in file: ${filepath}`);
+      cx.log.err(`Seconds-level cron is not supported, use 5 fields instead: "${sixExpStr}" in file: ${filepath}`);
       return null;
     }
   }
@@ -116,7 +115,7 @@ export function getJobItem(cx: CronjobContext, filepath: string, lines: string[]
     if (cron === Marker.BEGIN) {
       // 已经在快中，再次碰到begin，则语法错误不予解析
       if (inCronBlock) {
-        log.err(cx, `Nested ${Marker.BEGIN} found in file: ${filepath}`);
+        cx.log.err(`Nested ${Marker.BEGIN} found in file: ${filepath}`);
         return null;
       }
       group++;
@@ -127,7 +126,7 @@ export function getJobItem(cx: CronjobContext, filepath: string, lines: string[]
     if (cron === Marker.END) {
       // 并不在块中，却直接碰到end，语法错误不予解析
       if (!inCronBlock) {
-        log.err(cx, `${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
+        cx.log.err(`${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
         return null;
       }
       inCronBlock = false;
@@ -139,7 +138,7 @@ export function getJobItem(cx: CronjobContext, filepath: string, lines: string[]
 
   // 语法错误不予解析
   if (inCronBlock) {
-    log.err(cx, `Unclosed ${Marker.BEGIN}/${Marker.END} block in file: ${filepath}`);
+    cx.log.err(`Unclosed ${Marker.BEGIN}/${Marker.END} block in file: ${filepath}`);
     return null;
   }
 

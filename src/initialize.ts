@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import net from 'node:net';
 
-import { log } from './utils.js';
 import { pythonCmd, hasTsx } from './interpreter.js';
 
 /** 持有引用，防止 unref 后的 server 被 GC，导致锁被提前释放 */
@@ -14,15 +13,15 @@ let lock: net.Server | null = null;
  */
 const orTsx = (cx: CronjobContext) => {
   if (!hasTsx) {
-    log.warn(cx, `'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
+    cx.log.warn(`'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
   }
 };
 
 const orPython = (cx: CronjobContext) => {
   if (pythonCmd) {
-    log.info(cx, `python available, .py files will be run by ${pythonCmd}`);
+    cx.log.info(`python available, .py files will be run by ${pythonCmd}`);
   } else {
-    log.warn(cx, 'python not available, .py jobs will be ignored');
+    cx.log.warn('python not available, .py jobs will be ignored');
   }
 };
 

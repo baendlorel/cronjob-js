@@ -6,7 +6,7 @@ import { type CronExpression, CronExpressionParser } from 'cron-parser';
  */
 export const parseExp = (cx: CronjobContext, exp: string): CronExpression | null => {
   try {
-    return CronExpressionParser.parse(exp, cx.timezoneConfig);
+    return CronExpressionParser.parse(exp, { tz: cx.timezone });
   } catch {
     return null;
   }

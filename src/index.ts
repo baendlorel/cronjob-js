@@ -6,7 +6,7 @@
 import { performance } from 'node:perf_hooks';
 
 import { type UserCronjobConfig, createContext } from './config.js';
-import { log, tryGlobSync } from './utils.js';
+import { tryGlobSync } from './utils.js';
 import { runTask, type TaskController } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
@@ -22,7 +22,7 @@ export type { TaskController } from './cron/task.js';
  */
 export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<TaskController> {
   const cx = createContext(config);
-  log.info(cx, `Config loaded: ${JSON.stringify(cx)}`);
+  cx.log.info(`Config loaded: ${JSON.stringify(cx)}`);
 
   await initialize(cx);
 
@@ -33,12 +33,12 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
       return;
     }
     if (filepaths.length === 0) {
-      log.info(cx, `No scripts found.`);
+      cx.log.info(`No scripts found.`);
       return;
     }
 
     const performanceNow = performance.now();
-    log.debug(cx, `Start`);
+    cx.log.debug(`Start`);
 
     const files = await loadFiles(filepaths);
     const jobs = await getJobs(cx, files, now);
@@ -49,12 +49,12 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
       }
     }
 
-    log.debug(cx, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
+    cx.log.debug(`Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
   };
 
   const task = runTask(cx, taskFn);
 
-  log.info(cx, `Cronjob start! pid=${process.pid}`);
+  cx.log.info(`Cronjob start! pid=${process.pid}`);
 
   return task;
 }
