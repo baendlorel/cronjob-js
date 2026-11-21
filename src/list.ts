@@ -69,21 +69,3 @@ function nextRunText(cx: CronjobContext, exp: string) {
     return '(no next run)';
   }
 }
-
-/** 判断当前模块是否是被直接执行的入口（tsx src/list.ts / node dist/index.js list） */
-const isEntry = () => {
-  if (!process.argv[1]) {
-    return false;
-  }
-  try {
-    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
-  } catch {
-    return false;
-  }
-};
-
-if (isEntry()) {
-  // 用法：tsx src/list.ts [dir]
-  // 不用顶层 await：CJS 产物不支持 TLA
-  void list(createContext(process.argv[2] ? { dir: process.argv[2] } : {}));
-}

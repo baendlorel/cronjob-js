@@ -10,10 +10,7 @@ export default defineConfig([
     clean: true,
     sourcemap: true,
     minify: !isDev,
-    target: 'node24',
+    target: 'node22',
     treeshake: !isDev,
-    deps: {
-      onlyBundle: ['type-narrow'],
-    },
   },
 ]);

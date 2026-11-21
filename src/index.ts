@@ -11,10 +11,10 @@ import { runTask, type TaskController } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
+import { list } from './list.js';
 
 export type { UserCronjobConfig } from './config.js';
 export type { TaskController } from './cron/task.js';
-export { list } from './list.js';
 
 /**
  * 启动定时任务主理，返回控制器
@@ -24,6 +24,12 @@ export { list } from './list.js';
 export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<TaskController> {
   const cx = createContext(config);
   cx.log.info(`Config loaded: ${JSON.stringify(cx)}`);
+
+  if (process.argv.includes('--list') || process.argv.includes('-l')) {
+    // 列出所有任务看一下效果就退出
+    await list(cx);
+    process.exit(0);
+  }
 
   await initialize(cx);
 
