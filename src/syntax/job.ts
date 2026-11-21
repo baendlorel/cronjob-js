@@ -61,8 +61,8 @@ export function getMatchedJob(item: JobItem, now: Date): Job {
  *
  * @returns 要跑的 cron，要跑多少次；
  */
-export function getJobsToRun(config: CronjobConfig, files: FileContent[], now: Date): Job[] {
-  const runs: Job[] = [];
+export function getJobs(files: FileContent[], now: Date): Job[] {
+  const jobs: Job[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -78,11 +78,11 @@ export function getJobsToRun(config: CronjobConfig, files: FileContent[], now: D
     }
 
     // 这里要把shebang算好，matchedjob要运行多少次直接看数字
-    const matchedJobs = getMatchedJob(jobItem, now);
-    if (matchedJobs.count > 0) {
-      runs.push(matchedJobs);
+    const job = getMatchedJob(jobItem, now);
+    if (job.count > 0) {
+      jobs.push(job);
     }
   }
 
-  return runs;
+  return jobs;
 }

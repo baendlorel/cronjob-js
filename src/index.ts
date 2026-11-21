@@ -8,7 +8,7 @@ import { performance } from 'node:perf_hooks';
 import { type UserCronjobConfig, loadConfig } from './config.js';
 import { log, tryGlobSync } from './utils.js';
 import { runTask, stopTask } from './cron/task.js';
-import { getJobsToRun } from './syntax/job.js';
+import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
 
@@ -21,11 +21,11 @@ export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
 
     const taskFn = async (now: Date) => {
       // 1、查找CRONJOB_DIR下面的所有符合suffix的文件
-      const files = tryGlobSync(config);
-      if (!files) {
+      const filepaths = tryGlobSync(config);
+      if (!filepaths) {
         return;
       }
-      if (files.length === 0) {
+      if (filepaths.length === 0) {
         log(`No scripts found.`);
         return;
       }
@@ -33,7 +33,8 @@ export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
       const performanceNow = performance.now();
       log(`Start`);
 
-      const jobs = await getJobsToRun(config, files, now);
+      const files = await loadFiles(filepaths);
+      const jobs = await getJobs(files, now);
 
       for (let i = 0; i < jobs.length; i++) {
         for (let n = 0; n < jobs[i].count; n++) {
