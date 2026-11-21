@@ -1,8 +1,9 @@
 export const enum Tag {
-  Spawned = '[Spawned]',
+  Spawn = '[Spawn]',
   Error = '[Error]',
   Warn = '[Warn]',
   Exit = '[Exit]',
+  Debug = '[Debug]',
 }
 
 export const enum CronjobState {
@@ -11,15 +12,13 @@ export const enum CronjobState {
   Stopped,
 }
 
-export const DEV_FLAG = '--dev';
-
 export namespace Marker {
-  export const CRON = '@cron';
+  export const CRON = '@cron' as const;
   export const CRON_REGEX = /@cron\b/;
 
-  export const BEGIN = '@cronbegin';
+  export const BEGIN = '@cronbegin' as const;
   export const BEGIN_REGEX = /@cronbegin\b/;
-  export const END = '@cronend';
+  export const END = '@cronend' as const;
   export const END_REGEX = /@cronend\b/;
 }
 
