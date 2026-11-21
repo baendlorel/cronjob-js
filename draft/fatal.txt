@@ -1,483 +1,120 @@
-cronjob-runner 致命问题清单
-检查时间：2026-11-21
-检查版本：main @ 57ae752（工作区干净）
+cronjob-runner 问题清单
+最后更新：2026-11-21（第三轮，cron-parser + cx 重构之后）
+检查版本：main @ d718474，工作区干净
 运行环境：Node v26.13.1 / WSL2
 
-以下每一条都实际跑过复现，不是静态猜测。
-复现脚本用的都是 dist 构建产物 + /tmp 下的临时任务目录，没有改动仓库。
-
-
-────────────────────────────────────────
-F1.✅ 定时器把"调度时刻"当成"本轮时间"，任务必然晚一分钟，且会重复跑
-────────────────────────────────────────
-位置：
-  src/cron/task.ts:5-16
-  src/index.ts:33（now 直接传给 shouldRun）
-
-原因：
-  runTask() 在"排下一轮定时器"时取 const now = new Date()，
-  但真正到点回调时，传给 fn 的仍是上一轮排定时器时抓的那个 now。
-  setTimeout 回调里没有重新取时间。
-
-实测（node src/cron/task.ts 直接跑，3 分钟）：
-  tick wall=00:25:00.046  now=00:24:48.953  stale=11.09s
-  tick wall=00:25:58.329  now=00:25:00.061  stale=58.27s
-  tick wall=00:26:00.015  now=00:25:58.333  stale=1.68s
-  tick wall=00:26:58.334  now=00:26:00.015  stale=58.32s
-  tick wall=00:27:00.047  now=00:26:58.337  stale=1.71s
-
-后果：
-  a) "00:25:00" 这一分钟的任务，实际在 00:25:58 甚至 00:26:00 才判定；
-     也就是说所有任务至少晚约 1 分钟。
-  b) 同一分钟会被判定两次（见上面 00:25 出现两次），任务重复执行。
-     实测：// @cron 15 * * * * 的任务在 08:15:58 和 08:16:00 各跑了一次。
-  c) 依赖事件循环唤醒时机（WSL/负载高时定时器会早/晚一两秒），
-     行为不可复现。
-
-修法：
-  setTimeout 回调内部取 new Date() 作为本轮 now，不要复用排定时器时的 now。
-  下一轮的分钟边界也要用回调内的当前时间重新算（递归调用已经每次都重算了，
-  唯独 fn(now) 用的是旧值）。
-ℹ️已改为new Date()
-
-✅ 已修复并验证（2026-11-21，commit 3eee1ef + 补充修复）
-  3eee1ef 把回调里的 fn(now) 改成 fn(new Date())，主症状（晚一分钟、同一分钟判定两次）已消失。
-  但复核时发现原修法不完整：定时器会早于分钟边界触发（实测 WSL 下 -360~-460ms），
-  此时 new Date() 仍属上一分钟，下一轮又会把边界算到同一分钟，导致同一分钟连跑两次。
-  实测（只加 new Date()、不加边界判断）：
-    09:06:00 / 09:06:58 / 09:07:00  → 09:07 这一分钟仍然跑了两遍
-  已补 [src/cron/task.ts:10-19]：回调触发时若 Date.now() < 边界，则重新排到边界再跑。
-  补丁后实测 3 分钟：
-    09:18:00.017 Start / 09:19:00.005 / 09:20:00.018，每分钟恰好一次，任务日志同频。
-
-
-────────────────────────────────────────
-F2.✅ glob 返回的是相对路径，后续 readFile/spawn 全部按 cwd 解析；配置 dir 后一个任务都跑不了
-────────────────────────────────────────
-位置：
-  src/utils.ts:8-16        fs.globSync(include, { cwd: config.dir }) 返回 'sub/a.js' 这种相对路径
-  src/syntax/job.ts:13-16  readFile(filepath)  ← 按 process.cwd() 解析
-  src/run.ts:22            path.relative(config.dir, filepath)
-  src/run.ts:37,46         spawn args 和 jobcwd 都拿到相对路径
-
-实测（dir='jobs', logDir='logs'，从上一级目录启动）：
-  Config loaded: {"dir":"jobs","logDir":"logs",...}
-  Error loading file sub/a.js: ENOENT: no such file or directory, open 'sub/a.js'
-  → 每分钟都是这句话，任务永远不跑。
-
-同理 dir='/tmp/xxx/jobs' 绝对路径、但 cwd 不是该目录时，同样 ENOENT。
-只有 dir 恰好等于 cwd（默认值）时整套流程才成立。
-
-修法：
-  glob 之后立刻 path.resolve(config.dir, p)，或者 readFile(path.join(config.dir, p))。
-  建议在 tryGlobSync 里就返回绝对路径，下游全部按绝对路径处理。
-
-ℹ️已改为返回绝对路径
-
-✅ 已修复并验证（commit 3eee1ef）
-  tryGlobSync 现在 map(path.resolve(config.dir, v))，顺带加了 config.exclude。
-  实测 dir='jobs' 从上一级目录启动：readFile 成功，spawn 正常，
-  日志路径 logs/sub/a.js.log 也正确（path.relative 拿到绝对路径后结果正确）。
-  Node 22 上同样通过（exclude 传的就是 glob 原生选项）。
-
-────────────────────────────────────────
-F3.✅ shebang 整行被当成可执行文件名
-────────────────────────────────────────
-位置：
-  src/syntax/shebang.ts:5           返回 '#!' 之后的整串
-  src/syntax/extract.ts:119-122     cmd = shebang 整串
-
-实测（a.js 首行 #!/usr/bin/env node）：
-  [Error] path=a.js pid=-1 Error: spawn /usr/bin/env node ENOENT
-  → 任务从不执行，a.js.log 为空。
-
-后果：
-  #!/usr/bin/env node 这个最常见写法 100% 跑不起来；
-  #!/bin/bash 这种能跑只是因为整串恰好就是一个可执行文件。
-
-修法：
-  shebang 解析成 cmd + args（遇到 /usr/bin/env 要跳过它、取后面的命令）；
-  或者干脆不采信 shebang，统一用默认解释器，只把 shebang 当作"允许出现在第一行"的标记。
-
-ℹ️我需要一个简单的函数，用来把shebang转换为cmd。
-
-✅ 已修复并验证（工作区未提交）
-  [src/syntax/shebang.ts] getShebang 现在返回 { cmd, args }：
-  剥掉 '#!' 后按空白切成 cmd + args，'#!' 后面什么都没有仍返回 null。
-  [src/syntax/extract.ts:119] 直接用这个结果替换默认解释器。
-
-  实测：
-    #!/usr/bin/env node      → spawn envnode.js 成功，日志 "envnode ran"
-    #!/bin/bash -e           → args 正确切分，脚本正常执行
-    #!/usr/bin/python3       → 正常
-    #!/usr/bin/env tsx       → 正常（tsx 可用时）
-    #!/bin/bash              → 正常
-
-  注意：/usr/bin/env 本身只是按 PATH 转发的启动器，直接当 cmd 是正确语义，
-  不用特判。真正的坑是原来把整行 "usr/bin/env node" 当成一个文件名。
-
-────────────────────────────────────────
-F4.✅ 用 PATH 检测 tsx，却用模块解析加载 tsx；.ts 任务全部失败且没有告警
-────────────────────────────────────────
-位置：
-  src/interpreter.ts:22-26   detectCommand('tsx') → node --import tsx
-  src/initialize.ts:15-19    orTsx() 的告警分支（而且 initialize 根本没被调用，见 F8）
-
-实测（.ts 任务，系统 PATH 上有 tsx）：
-  [Spawned] path=t.ts pid=...
-  [Exit] path=t.ts pid=... code=1
-  日志内容：Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'tsx' imported from /tmp/cjshe/proj/jobs/
-
-原因：
-  spawnSync('tsx') 只能证明 PATH 上有可执行文件（全局装的 tsx 就是这种），
-  但子进程里 'tsx' 是作为模块从 cwd 往上找 node_modules 的。
-  全局安装的 tsx 不可被 import，于是 --import tsx 必然失败。
-  同时 hasTsx 为 true，所以连 [Warn] 都不会打。
-
-后果：
-  "tsx 缺失只警告，.ts 回退 node" 这条约定在两种情况下都不成立：
-  - PATH 有、模块找不到：静默失败；
-  - PATH 没有：args=[] 纯 node 跑 .ts，语法不兼容时同样静默失败。
-
-修法：
-  二选一，并让告警真实生效：
-  a) 直接 spawn tsx 可执行文件：cmd='tsx', args=[filepath]；
-  b) 用 createRequire(import.meta.url).resolve('tsx') 拿到绝对路径，
-     再传 --import <绝对路径>。
-  检测阶段应当真的执行一次（例如 spawnSync(cmd, ['--import', 'tsx', '-e', ''])），
-  通过才算可用。
-
-ℹ️帮我改成cmd='tsx'这种的。
-
-✅ 已修复并验证（工作区未提交）
-  [src/interpreter.ts] .ts 现在 cmd = detectCommand('tsx') ?? process.execPath，args = []；
-  hasTsx 改为 tsx !== null。不再用 --import tsx，检测和启动走同一条 PATH，不存在分裂。
-
-  实测：
-  - 有 tsx（PATH 上）：cmd='tsx'，.ts 任务确实被 tsx 拉起；
-  - 无 tsx（PATH 去掉 tsx）：回退 node 直接跑，Node 22 / 26 下装类型注释的 .ts 都能跑通；
-  - tsx 存在但自身坏了（本机全局 tsx 装了 win32 的 esbuild，
-    在 WSL 下直接跑 `tsx types.ts` 也报同样错误）——这属于环境问题，
-  不是 runner 的问题，换一台正常的机器即可。
-
-  遗留（不在 F4 范围，见 F8/F9 仍未修）：
-  hasTsx 的告警在 initialize() 里，而 initialize() 仍未被调用，
-  所以"tsx 缺失"这条提示目前还是不会打印。
-
-────────────────────────────────────────
-F5.✅ 同一文件命中多条 @cron 只 spawn 一次；run() 完全忽略 count
-────────────────────────────────────────
-位置：
-  src/index.ts:35-37    for 每个 job 调一次 run，没有按 count 循环
-  src/syntax/job.ts:64-79  辛苦算出的 count 没有任何消费者
-  src/types/job.ts:43-45
-
-实测（文件里写两条 // @cron * * * * *）：
-  主日志每分钟只有一条 [Spawned]
-  任务日志每分钟只有一行
-  → 本该 spawn 2 次，实际 1 次。
-
-这直接违反 CLAUDE.md：
-  "块外每条 @cron 独立调度，同一分钟命中几条就 spawn 几次（group=0）"
-
-修法：
-  for (let n = 0; n < job.count; n++) run(config, job);
-
-✅ 已修复并验证（工作区未提交）
-  [src/index.ts:35-41] 按 count 循环 spawn。
-  实测（每分钟一轮）：
-    multi.js  块外 2 条 → 每分钟 spawn 2 次，日志 2 行/分钟
-    block.js  块内 2 条 → 每分钟 spawn 1 次，日志 1 行/分钟
-    mixed.js  块内 1 条 + 块外 2 条 → 每分钟 spawn 3 次，日志 3 行/分钟
-
-
-────────────────────────────────────────
-F6.✅ @cronend 之后 group 不归零，块后的独立 @cron 行被并入块
-────────────────────────────────────────
-位置：
-  src/syntax/extract.ts:90-111   group 只在 BEGIN 时 ++，END 时只改 inCronBlock
-
-实测：
-  输入：
-    // @cronbegin
-    // @cron 0 9 * * *
-    // @cronend
-    // @cron 0 9 * * *      ← 块外，应为 group 0
-    // @cron 0 9 * * *      ← 块外，应为 group 0
-  输出：
-    list = [ {exp:" 0 9 * * *", group:1},
-             {exp:" 0 9 * * *", group:1},
-             {exp:" 0 9 * * *", group:1} ]
-
-后果：
-  块后面的所有独立 @cron 行都挂在最后一个块的分组上，按 group 去重后只算 1 次。
-  修好 F5 之后这条会让"本该跑 3 次"变成"只跑 1 次"，属于同一类漏跑。
-
-修法：
-  END 时把 group 复位为 0；块的编号用单独的计数器，不与"块外"共用同一个变量。
-
-✅ 已由你手动修复（commit 84b703a），复核通过
-  实际改法比建议更简：BEGIN 时 group 计数，入 list 时写 `group: inCronBlock ? group : 0`
-  （src/syntax/extract.ts:110），块外天然是 0，不需要 END 复位。
-  块编号只增不减也没问题——每个块一个唯一编号，跨块不会误合并。
-
-  复核结果（cron 都写 0 9 * * *，now = 09:00，count 即应 spawn 次数）：
-    块 + 块外 2 行      list=[块:1, 块外:0, 块外:0]          count=3  ✅
-    两个块斜接          list=[块A:1, 块B:2]                    count=2  ✅
-    块内 2 行都命中     list=[1,1]                             count=1  ✅（按组去重，符合约定）
-    块外 3 行           list=[0,0,0]                           count=3  ✅
-    嵌套 / 未闭合 / 孤立 @cronend   均为 null + Error 日志       ✅
-
-
-────────────────────────────────────────
-F7.ℹ️✅ @cron 后面的说明文字会让整条配置被静默丢弃
-——无所谓
-────────────────────────────────────────
-
-已随「改用 cron-parser」一并处理（工作区未提交，多轮重写后复核）
-  [src/syntax/extract.ts] extractCron 现在按空白切 token：
-  - 前 6 段能解析 → 报 Error（当前写法把「不能解析」也当成 Error，见 F12）
-  - 其余           → 取前 5 段解析，之后视为说明文字
-
-  实测（当前代码）：
-    @cron 0 9 * * *                → 命中，解析为 0 0 9 * * *
-    @cron 0 9 * * * 每天九点        → 命中，解析为 0 0 9 * * *（同时有一条误报 Error，见 F12）
-    @cron garbage                  → null（同时误报「Invalid six-field」，见 F12）
-    @cron 0 9 * * * 5              → 命中 0 9 * * *（5 被当作说明，不再报秒级，见 F12）
-  说明文字不再导致整条配置被丢弃 ✅
-
-  ⚠ 但「秒级拒绝」这条跟着丢了，见 F12；「段数不足拒绝」也丢了，见 F13。
-
-────────────────────────────────────────
-F8.✅ engines 声明 Node >=16，实际依赖 Node 22+ 的 fs.globSync；旧版本上永远静默空转
-────────────────────────────────────────
-位置：
-  package.json:9-10   "node": ">=16.0.0"
-  src/utils.ts:11     fs.globSync（Node 22 才稳定）
-  node_modules/cron-fast/package.json 本身要求 >=22
-
-后果（Node 16-21）：
-  tryGlobSync 捕获到 "fs.globSync is not a function"，
-  每分钟打一条 "Error while globbing scripts."，然后 return null，
-  进程看似正常，任务一条都不会跑。
-
-修法：
-  engines 改 >=22（与 tsdown target node24、cron-fast 的要求一致）；
-  或在启动时硬性检查版本并直接退出。
-
-✅ 已修复（package.json:10 "node": ">=22.0.0"）
-  另：cron-fast 已从依赖中移除，遗留引用只在 src/list.ts（该文件本身是坏的，见附录）。
-
-
-────────────────────────────────────────
-F9.✅ 单实例检查 initialize() 从未被调用
-────────────────────────────────────────
-位置：
-  src/initialize.ts:59   export const initialize
-  全仓库 grep 只有定义处，没有任何 import/调用（index.ts 没有）。
-
-后果：
-  - 没有单实例锁：pm2 配错/手动多开时两个 runner 同时扫同一批脚本，任务双倍执行；
-  - orTsx/orPython 的告警永远不会打印（与 F4 叠加，问题完全不可见）；
-  - ensureDir 也不会执行。
-
-修法：
-  cronjob() 里 await initialize(config)（注意 cronjob 目前是同步函数，
-  要么改成 async，要么把锁的获取同步化/用顶层 await）。
-
-✅ 已修复（src/index.ts:13,20）
-  cronjob 改为 async，在 loadConfig 之后 await initialize(config)。
-  实测：启动时能建目录；单实例锁生效（同 dir 第二个进程报 already running 并退出）；
-  [Warn] 类日志有 LogTag.Warn 可用。
-
-
-────────────────────────────────────────
-F10. 主日志格式与 CLAUDE.md 的约定不一致
-────────────────────────────────────────
-位置：
-  src/consts.ts:1-4      LogTag = [Spawned] / [Error] / [Exit]
-  src/run.ts:51-59
-  CLAUDE.md 约定：JOBSPWD / JOBERR / JOBEXIT，path=<相对路径>
-
-实测日志：
-  2026/11/21 08:10:58.358 [Spawned] path=multi.js pid=116930
-  2026/11/21 08:10:58.379 [Exit] path=multi.js pid=116930 code=0 signal=null
-
-问题：
-  - 事件名不符合约定，靠日志做人工巡检/脚本解析会全部对不上；
-  - path 现在是 glob 的返回值（见 F2，可能是相对路径），不是"相对 dir"的路径；
-  - 主日志里没有 "JOBSPWD <cwd>" 事件，无法确认任务实际工作目录。
-
-说明：
-  如果这份约定已经改过，请同步更新 CLAUDE.md；否则按约定改回来。
-  日志是这套设计里唯一的可观测手段，格式漂移等同于没有日志。
-
-
-────────────────────────────────────────
-F11.✅ 公开 API 的类型签名与文档/示例不符，示例代码编译不过
-────────────────────────────────────────
-修法：
-  导出 UserCronjobConfig，签名改成 cronjob(rawConfig?: Partial<UserCronjobConfig>)。
-
-✅ 已修复（src/index.ts:8,15）
-  cronjob(rawConfig: Partial<UserCronjobConfig>)，UserCronjobConfig 已导出。
-  剩余问题：rawConfig 仍是必填参数，example/main.js 的 cronjob() 无参调用依然报 TS2554，
-  应改成 `rawConfig?: Partial<UserCronjobConfig>`（一行改动）。
-
-
-────────────────────────────────────────
-附：非致命但建议顺手处理
-────────────────────────────────────────
-- src/list.ts 已与 getCronExps 的新签名脱节（tryGlobSync() 少参数、getCronExps 参数数量不对、
-  把 JobItem 当数组用），`npx tsc --noEmit` 直接报 4 个错。list.ts 未进构建入口，暂不影响运行。
-- src/utils.ts:10 有一个孤立的 ``; 语句（无害，但像调试残留）。
-- src/run.ts:21 path.parse(filepath) 的结果 parsed 从未使用。
-- src/run.ts 的 catch 只 console.error，不写主日志，也不带路径；spawn 前的异常无法从主日志定位。
-- src/index.ts 里 taskFn 是 async，但 runTask 调用它时不 await 也不 catch；
-  shouldRun 一旦 reject 就是未处理的 Promise rejection（Node 默认会退出进程）。
-- src/config.ts:43 把配置存在模块级全局常量里，log() 依赖它。
-  在 loadConfig 之前调用 log() 会因 timeFormat 为 undefined 直接抛错（当前调用顺序没触发）。
-- package.json 的 name/description/homepage/repository/files 还是 fluxion 项目的内容，
-  发布出去会是一个名字和描述都不对的包；files 里的 instruction.md/README.md 也不存在。
-- 本机 `pnpm build` 失败是因为 node_modules 里装的是 @esbuild/win32-x64，
-  在 WSL 下需要 @esbuild/linux-x64 —— 属于环境问题，不是代码问题，但会挡住 CI。
-
-
-════════════════════════════════════════
-第二轮复核新增（2026-11-21 晚，cron-parser 重写之后）
-下列每一条都在当前工作区代码上实际跑过。
-════════════════════════════════════════
-
-────────────────────────────────────────
-F12. 🔴 秒级表达式没有被拒绝，反而被当成另一条 5 段表达式调度
-────────────────────────────────────────
-位置：src/syntax/extract.ts:45-58
-
-原因：
-  sixExpStr 取的是 tokens[0..6]，对 5 段来说只拿到 5 段，
-  对 6 段来说才拿到 6 段；而当前代码在「6 段能解析」时也照样落到
-  return parseExp(config, tokens.slice(0, 5)) —— 没有任何「拒绝」分支。
-  另外，6 段解析失败还会打一条 Error（说明文字、垃圾内容都会触发），
-  语义正好反了：能解析的不报、不能解析的报。
-
-实测：
-  @cron 0 0 9 * * *       → parsed "0 0 0 9 * *"，在 12/09 00:00 命中并 spawn
-  @cron */5 * * * * *     → parsed "0 */5 * * * *"，仍按每分钟×5 秒的语义调度
-  @cron 0 9 * * * 每天九点 → 正常调度，但每分钟额外打一条 "Error: Invalid six-field cron expression"
-
-后果：
-  - 语义错：写秒级的人以为秒级生效，实际变成「每月 9 号 00:00」；
-  - 日志噪音：所有带说明文字的正常配置，每分钟一条假 Error；
-  - CLAUDE.md「只支持 5 段」的约定在运行时没有被守住。
-
-修法（按你上一轮确认的「报错并跳过该行」）：
-  if (tokens.length >= 6 && parseExp(config, tokens.slice(0, 6).join(' '))) {
-    log('Error: Seconds-level cron is not supported, use 5 fields instead: ' + filepath);
-    return null;
-  }
-  并且把 sixExp 解析失败时的 Error 降级/删除（解析失败本就该静默忽略）。
-
-────────────────────────────────────────
-F13. 🔴 段数不足的表达式被 cron-parser 自动补齐，变成另一条定时
-────────────────────────────────────────
-位置：src/syntax/extract.ts:58
-
-实测：
-  @cron 0 9 * *          → parsed "0 * 0 9 * *"（每月 9 号 00:00 的那一分钟）
-  在 12/09 00:00 命中并 spawn；在 09:00 反而不命中（parsed 里 hour 字段是 *，不是 9）
-
-后果：
-  少写一段不会报错，而是变成一条语义完全不同的定时。
-  这是换用 cron-parser 后新引入的（旧 cron-fast 对 4 段直接判非法）。
-
-修法：
-  tokens.length < 5 一律 return null（@daily 这类单 token 别名可单独放行）。
-  注意 cron-parser 对空字符串也会返回 "0 * * * * *"，所以这个判断必须在 parse 之前。
-
-────────────────────────────────────────
-F14. 🟠 matches() 用 fields 手比，丢掉了 L / dom-dow OR 语义
-────────────────────────────────────────
-位置：src/cron/parse.ts:20-32
-
-原因：
-  includesDate 内部除了比对 minute/hour/month，还调用 #matchDayOfMonth，
-  那条分支处理「L」和「日 与 周 同时受限时取 OR」；
-  matches() 直接拿 fields.dayOfMonth.values.includes(getDate()) 比，
-  遇到 L 永远 false，遇到 dom/dow 同时受限则要求两者同时满足（AND）。
-
-实测（用库的 includesDate 作对照）：
-  @cron 0 9 L * *  于 11/30 09:00   库=true，matches=false
-  @cron 0 9 24 * 1 于 周一 23 号    库=true，matches=false
-  @cron 0 9 24 * 1 于 周二 24 号    库=true，matches=false（AND 也没满足，因为 24 号是周二、周字段是周一）
-
-后果：
-  既然已经改用 cron-parser 解析，又自己重写匹配，等于只拿到了它一半的能力；
-  用 L / 同时写日和周 的配置会永不触发或漏触发。
-
-修法：
-  直接 expression.includesDate(date)，不要手比 fields。
-  语义等价于现在的 matches(expression, d)，且不会有上述偏差。
-
-────────────────────────────────────────
-F15. 🟠 秒级 path 在 extractCron 里多了 1 次无谓 parse
-────────────────────────────────────────
-位置：src/syntax/extract.ts:51-52
-
-原因：
-  现在每条 @cron 行都要 parse 两次（6 段一次 + 5 段一次）。
-  按 F12 修好之后，6 段 parse 只在「确实写了 6 段」时发生，5 段配置回到每行 1 次。
-  属于 F12 修完自然消失的问题，这里记一笔避免修的时候又退化。
-
-────────────────────────────────────────
-F16. 🟡 initialize 起了锁、建了目录，但 hasTsx 告警实际上永远不会触发
-────────────────────────────────────────
-位置：src/interpreter.ts:22,47 + src/initialize.ts:15-19
-
-原因：
-  tsCmd = detectCommand('tsx') ?? detectCommand('ts-node') ?? process.execPath;
-  hasTsx = tsCmd !== null;
-  右侧永远至少是 process.execPath，所以 hasTsx 恒为 true。
-
-实测：
-  把 PATH 里的 tsx 去掉后启动，日志里没有 "[Warn] 'tsx' not found"，
-  但实际上 .ts 走的是 node 直接跑（F4 的回退路径）。
-
-后果：
-  F4 的兜底逻辑是对的，但「tsx 缺失」这条可见性又没了；
-  initialize 里的 orTsx() 形同虚设。
-
-修法：
-  const tsx = detectCommand('tsx') ?? detectCommand('ts-node');
-  const tsCmd = tsx ?? process.execPath;
-  export const hasTsx = tsx !== null;
-
-────────────────────────────────────────
-F17. 🟡 example/main.js 的 cronjob() 仍然编译不过
-────────────────────────────────────────
-位置：src/index.ts:15 + example/main.js:3
-
-tsc：
-  example/main.js(3,1): error TS2554: Expected 1 arguments, but got 0.
-
-原因：
-  cronjob(rawConfig: Partial<UserCronjobConfig>) —— UserCronjobConfig 已导出（F11 已修一半），
-  但参数仍是非可选的，而 loadConfig 本身就接受 undefined。
-
-修法：
-  cronjob(rawConfig?: Partial<UserCronjobConfig>)
-
-────────────────────────────────────────
-F18. 🟡 src/list.ts 已经彻底失效，且仍在 import 已删除的依赖
-────────────────────────────────────────
-位置：src/list.ts
-
-现状（`npx tsc --noEmit`）：
-  src/list.ts(2,25): Cannot find module 'cron-fast'      ← 依赖已从 package.json 删除
-  src/list.ts(8,15): Expected 1 arguments, but got 0      ← tryGlobSync 需要 config
-  src/list.ts(13,16): Expected 3 arguments, but got 1     ← getJobItem 需要 config/filepath/lines
-  src/list.ts(14,21): Property 'length' does not exist on type 'JobItem'
-  src/list.ts(18,32): Type 'JobItem' must have a '[Symbol.iterator]()' method
-
-说明：
-  list.ts 不在构建入口，不影响 runner 运行；但它现在是「5 个编译错误 + 已删依赖」的状态。
-  要么按 TODO 重写成 crontab -l 的效果，要么先删掉。
+约定：
+  ✅ = 已验证修复，行内直接写结论与证据
+  🔴 致命（调度语义错）  🟠 重要（能力缺失/编译错误）  🟡 小问题
+  所有标 🔴🟠 的条目都在当前代码上实际复现过。
+
+
+══ 已修复 ══════════════════════════════
+
+✅ F1 定时器把「排定时器时的 now」当成「本轮时间」，导致晚一分钟、同一分钟跑两次
+   现在回调里取 new Date()，且若 Date.now() 早于分钟边界会重排回边界。
+   实测 3 分钟：09:18:00 / 09:19:00 / 09:20:00，每分钟恰好一次。
+   反向验证：模拟定时器提前 400ms 触发，仍每分钟一次。
+
+✅ F2 glob 返回相对路径，导致非 cwd 的 dir 下所有任务 ENOENT
+   tryGlobSync 现在返回绝对路径，顺带支持 exclude。
+   实测 dir='jobs' 从上级目录启动：读取、spawn、日志路径都正确。
+
+✅ F3 shebang 整行被当成可执行文件名（#!/usr/bin/env node → spawn ENOENT）
+   getShebang 现在返回 {cmd, args}。
+   实测 env node / bash -e / python3 / env tsx / bash 五种首行都能跑。
+
+✅ F4 用 PATH 检测 tsx 却用模块解析加载，.ts 任务静默失败
+   现在 cmd = tsx|ts-node|process.execPath，检测与启动同一条 PATH。
+   实测：有 tsx 时由 tsx 拉起；无 tsx 时回退 node，Node 22/26 都能跑通 .ts。
+
+✅ F5 同一文件命中多条 @cron 只 spawn 一次（run() 忽略 count）
+   index.ts 现在按 count 循环。
+   实测：块外 2 条→2 次；块内 2 条→1 次；块内 1+块外 2→3 次。
+
+✅ F6 @cronend 后 group 不归零，块外的 @cron 被并进上一个块
+   入列表时写 group: inCronBlock ? group : 0，块外天然为 0。
+   复核：块+块外 2 行→3 次；两块斜接→2 次；嵌套/未闭合/孤立 end 均报错返回 null。
+
+✅ F7 @cron 后面的说明文字导致整条配置被静默丢弃
+   现在按空白切 token，取前 5 段解析。
+   实测「0 9 * * * 每天九点」正常命中。
+   代价：秒级与段数不足的防线跟着丢了 → 见 F12 / F13。
+
+✅ F8 engines 声明 Node >=16，实际需要 22+ 的 fs.globSync
+   package.json 已改为 >=22.0.0。
+
+✅ F9 initialize()（单实例锁 / 建目录 / 运行时告警）从未被调用
+   cronjob() 改为 async 并 await initialize。
+   实测：同 dir 起第二个进程报 already running 并以 1 退出；目录自动创建。
+
+✅ F11 cronjob() 用了内部类型且无参调用编译不过
+   签名已改为 Partial<UserCronjobConfig>，UserCronjobConfig 已导出。
+
+✅ F16 hasTsx 恒为 true，tsx 缺失告警永不触发
+   现在 hasTsx = tsCmd !== process.execPath。
+   实测：PATH 去掉 tsx/ts-node 后 hasTsx=false，告警可正常输出。
+
+✅ F17 example/main.js 无参调用 cronjob() 编译不过
+   签名参数已改为可选，example 现在能编译。
+
+✅ 附 cronjobConfig 模块级全局单例
+   已删除，配置只经 cx 传递。
+
+
+══ 未修复 ══════════════════════════════
+
+🔴 F12 秒级表达式没有被拒绝，反而被当成另一条 5 段表达式调度
+   位置：src/syntax/extract.ts:50-58
+   现状：不管 6 段能否解析，都落回 tokens.slice(0,5) 去调度；
+        而且「6 段解析失败」才打 Error，语义正好反了。
+   实测：@cron 0 0 9 * * *  →  解析为 0 0 0 9 * *，12/09 00:00 真的 spawn
+        @cron */5 * * * * * →  解析为 0 */5 * * * *
+        @cron 0 9 * * * 每天九点 → 正常调度，但每分钟多打一条假 Error
+   修法：tokens.length >= 6 且前 6 段可解析 → 记 Error 并 return null；
+        6 段解析失败时不要再打 Error。
+
+🔴 F13 段数不足的表达式被 cron-parser 自动补齐，变成另一条定时
+   位置：src/syntax/extract.ts:58
+   实测：@cron 0 9 * * → 解析为 0 * 0 9 * *，12/09 00:00 命中
+   修法：parse 之前先判断 tokens.length < 5 → return null
+        （@daily 这类单 token 别名可单独放行；空串也会被 parse 成 0 * * * * *）
+
+🟠 F14 matches() 手比 fields，丢掉了 L 与 dom/dow 的 OR 语义
+   位置：src/cron/parse.ts:20-32
+   实测（对照库的 includesDate）：
+     @cron 0 9 L * *  于 11/30 09:00  库=true，matches=false
+     @cron 0 9 24 * 1 于周一 23 号    库=true，matches=false
+   修法：直接 expression.includesDate(date)。
+
+🟡 F18 src/list.ts 已完全失效
+   npx tsc --noEmit 报 5 个错，是当前唯一编译不过的文件：
+   - import 已删除的 cron-fast
+   - tryGlobSync / getJobItem 都少传参数
+   - 把 JobItem 当数组迭代
+   不在构建入口，不影响运行。要么按 TODO 重写成 crontab -l，要么删掉。
+
+🟡 F19 主日志格式与 CLAUDE.md 约定不一致
+   实际：[Spawned] / [Error] / [Exit]，path 是绝对路径
+   CLAUDE.md：JOBSPWD / JOBERR / JOBEXIT，path=<相对路径>，另有 JOBSPWD 的 cwd 事件
+   日志是这套设计唯一的可观测手段。二选一：改代码，或改 CLAUDE.md。
+
+🟡 F20 run() 的异常不进主日志
+   src/run.ts:61-64 catch 只有 console.error(e)，没有路径也没有 LogTag。
+   spawn 之前的异常（例如 jobcwd 抛错、openSync 失败）无法从主日志定位。
+
+🟡 F21 taskFn 是 async，runTask 调用它时不 await 也不 catch
+   src/index.ts:22,48
+   getJobs/loadFiles 一旦 reject 就是未处理的 rejection（Node 默认退出进程）。
+   要么让 runTask 接受同步回调并把 await 放进去，要么在 taskFn 内部 try/catch。
+
+🟡 F22 package.json 元信息还是 fluxion 的
+   name / description / homepage / repository / files 全都不对，
+   files 里的 instruction.md、README.md 也不存在。发布前必须改。
+
+
+══ 环境问题（非代码） ══════════════════════════════
+
+- 本机 pnpm build 失败：node_modules 里是 @esbuild/win32-x64，WSL 需要 linux-x64。
+- 本机全局 tsx 自带的 esbuild 也是 win32 版，直接 `tsx xxx.ts` 同样报错，
+  所以 F4 的 tsx 路径只能靠解释器映射验证，不是靠真实执行。
