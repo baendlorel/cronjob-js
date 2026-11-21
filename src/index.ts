@@ -33,7 +33,9 @@ export const cronjob = (rawConfig: Partial<CronjobConfig>) => {
       const jobs = await shouldRun(config, files, now);
 
       for (let i = 0; i < jobs.length; i++) {
-        run(config, jobs[i]);
+        for (let n = 0; n < jobs[i].count; n++) {
+          run(config, jobs[i]);
+        }
       }
 
       log(`Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);

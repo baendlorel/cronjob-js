@@ -183,6 +183,13 @@ F5. 同一文件命中多条 @cron 只 spawn 一次；run() 完全忽略 count
 修法：
   for (let n = 0; n < job.count; n++) run(config, job);
 
+✅ 已修复并验证（工作区未提交）
+  [src/index.ts:35-41] 按 count 循环 spawn。
+  实测（每分钟一轮）：
+    multi.js  块外 2 条 → 每分钟 spawn 2 次，日志 2 行/分钟
+    block.js  块内 2 条 → 每分钟 spawn 1 次，日志 1 行/分钟
+    mixed.js  块内 1 条 + 块外 2 条 → 每分钟 spawn 3 次，日志 3 行/分钟
+
 
 ────────────────────────────────────────
 F6. @cronend 之后 group 不归零，块后的独立 @cron 行被并入块
@@ -208,6 +215,18 @@ F6. @cronend 之后 group 不归零，块后的独立 @cron 行被并入块
 
 修法：
   END 时把 group 复位为 0；块的编号用单独的计数器，不与"块外"共用同一个变量。
+
+✅ 已由你手动修复（commit 84b703a），复核通过
+  实际改法比建议更简：BEGIN 时 group 计数，入 list 时写 `group: inCronBlock ? group : 0`
+  （src/syntax/extract.ts:110），块外天然是 0，不需要 END 复位。
+  块编号只增不减也没问题——每个块一个唯一编号，跨块不会误合并。
+
+  复核结果（cron 都写 0 9 * * *，now = 09:00，count 即应 spawn 次数）：
+    块 + 块外 2 行      list=[块:1, 块外:0, 块外:0]          count=3  ✅
+    两个块斜接          list=[块A:1, 块B:2]                    count=2  ✅
+    块内 2 行都命中     list=[1,1]                             count=1  ✅（按组去重，符合约定）
+    块外 3 行           list=[0,0,0]                           count=3  ✅
+    嵌套 / 未闭合 / 孤立 @cronend   均为 null + Error 日志       ✅
 
 
 ────────────────────────────────────────
