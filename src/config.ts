@@ -45,6 +45,11 @@ export interface UserCronjobConfig {
 
 export interface CronjobConfig extends UserCronjobConfig {
   timeFormat: Intl.DateTimeFormat;
+
+  /**
+   * 很多地方传参都是这个样子的，因此直接给一个方便不要反复创建
+   */
+  timezoneConfig: { timezone: string };
   jobcwd: (scriptPath: string) => string;
 }
 
@@ -84,6 +89,7 @@ export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfi
   cronjobConfig.include = include;
   cronjobConfig.exclude = exclude;
   cronjobConfig.timezone = timezone;
+  cronjobConfig.timezoneConfig = { timezone };
   cronjobConfig.timeFormat = new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',

@@ -1,29 +1,35 @@
-import type { CronExpItem, JobItem } from '../types/job.js';
+import type { CronGroupItem, JobItem } from '../types/job.js';
+import type { CronExpression } from 'cron-parser';
 import { extname } from 'node:path';
-import { isValid } from 'cron-fast';
-import { Marker } from '../consts.js';
+import { type CronBlockMaker, Marker } from '../consts.js';
+import { parseExp } from '../cron/parse.js';
 import { log } from '../utils.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
 import { getDefaultInterpreter } from '../interpreter.js';
 
 /**
- * 从一行文本中提取带标记的 cron 表达`式
+ * 从一行文本中提取带标记的 cron 表达式
+ * - 只接受5位表达式，不支持秒级
  *
- * @param trimmed 已经去掉前导空格的行文本
+ * @param trimmedLine 已经去掉前导空格的行文本
  * @param inBlock 是否在 @cronbegin 和 @cronend 块中
  * @param filepath 文件路径，用于日志输出
  */
-export function extractCron(trimmed: string, inBlock: boolean, filepath: string): string | null {
-  if (trimmed.search(Marker.BEGIN_REGEX) !== -1) {
+export function extractCron(
+  trimmedLine: string,
+  inBlock: boolean,
+  filepath: string,
+): CronExpression | CronBlockMaker | null {
+  if (trimmedLine.search(Marker.BEGIN_REGEX) !== -1) {
     return Marker.BEGIN;
   }
-  if (trimmed.search(Marker.END_REGEX) !== -1) {
+  if (trimmedLine.search(Marker.END_REGEX) !== -1) {
     return Marker.END;
   }
 
   // 可以确保到此为止的都是注释，且trim过
-  const markerIndex = trimmed.search(Marker.CRON_REGEX);
+  const markerIndex = trimmedLine.search(Marker.CRON_REGEX);
   if (markerIndex === -1) {
     if (inBlock) {
       //! 因为js多行注释会导致"*"开头的行被误认为cron表达式的一部分
@@ -33,22 +39,30 @@ export function extractCron(trimmed: string, inBlock: boolean, filepath: string)
   }
 
   // 直接切片，从@cron后面开始获取字符
-  const exp = trimmed.slice(markerIndex + Marker.CRON.length);
+  const tokens = trimmedLine
+    .slice(markerIndex + Marker.CRON.length)
+    .split(/\s+/)
+    .filter(Boolean);
 
-  return isValid(exp) ? exp : null;
+  //! 不支持6个位的
+  const sixExpStr = tokens.slice(0, 6).join(' ');
+  const sixExp = parseExp(sixExpStr);
+  if (!sixExp) {
+    log(`Error: Invalid six-field cron expression: ${sixExpStr}`);
+  }
+
+  // 直接返回5位的解析结果
+  return parseExp(tokens.slice(0, 5).join(' '));
 }
 
-export const getOrInsert = (map: Map<any, any[]>, key: any): any[] => {
-  if (!map.has(key)) {
-    map.set(key, []);
-  }
-  return map.get(key)!;
-};
-
 /**
- * 从文件内容提取带标记的 cron 表达式
+ * 从文件内容提取带标记的 cron 表达式，并组合成`JobItem`，一次性提供
+ * cron表达式对象、分组信息、文件路径以及解释器信息
+ *
+ * @param filepath 文件路径，用于日志输出
+ * @param lines 文件内容的每一行
  */
-export function getCronExps(filepath: string, lines: string[]): JobItem | null {
+export function getJobItem(filepath: string, lines: string[]): JobItem | null {
   const ext = extname(filepath);
   const allowFn = getAllowFn(ext);
 
@@ -77,18 +91,19 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
     return null;
   }
 
-  const list: CronExpItem[] = [];
+  const list: CronGroupItem[] = [];
 
   let inCronBlock = false;
   let group = 0;
   for (const line of lines) {
-    const exp = extractCron(line, inCronBlock, filepath);
-    if (!exp) {
+    const cron = extractCron(line, inCronBlock, filepath);
+    // 忽略空的
+    if (!cron) {
       continue;
     }
 
-    if (exp === Marker.BEGIN) {
-      // 语法错误不予解析
+    if (cron === Marker.BEGIN) {
+      // 已经在快中，再次碰到begin，则语法错误不予解析
       if (inCronBlock) {
         log(`Error: Nested ${Marker.BEGIN} found in file: ${filepath}`);
         return null;
@@ -98,8 +113,8 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
       continue;
     }
 
-    if (exp === Marker.END) {
-      // 语法错误不予解析
+    if (cron === Marker.END) {
+      // 并不在块中，却直接碰到end，语法错误不予解析
       if (!inCronBlock) {
         log(`Error: ${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
         return null;
@@ -107,7 +122,8 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
       inCronBlock = false;
       continue;
     }
-    list.push({ exp, group: inCronBlock ? group : 0 });
+
+    list.push({ cron, group: inCronBlock ? group : 0 });
   }
 
   // 语法错误不予解析
@@ -118,5 +134,5 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
 
   const interpreter = shebang ?? getDefaultInterpreter(ext);
 
-  return { list, interpreter, filepath };
+  return { flatCronGroups: list, interpreter, filepath };
 }

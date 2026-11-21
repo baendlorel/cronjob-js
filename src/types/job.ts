@@ -1,8 +1,4 @@
-export interface FileContent {
-  filepath: string;
-  content: string | null;
-  error: Error | null;
-}
+import type { CronExpression } from 'cron-parser';
 
 export interface Interpreter {
   cmd: string;
@@ -12,9 +8,9 @@ export interface Interpreter {
 /**
  * 按照cron表达式分组
  */
-export interface CronExpItem {
-  exp: string;
+export interface CronGroupItem {
   group: number;
+  cron: CronExpression;
 }
 
 interface JobBase {
@@ -35,9 +31,10 @@ interface JobBase {
  */
 export interface JobItem extends JobBase {
   /**
-   * 这个中间状态是为了方便函数式的测试
+   * 扁平化的 cron 分组列表，会包含多个相同group数字的项。
+   * - 这个中间状态是为了方便函数式的测试
    */
-  list: CronExpItem[];
+  flatCronGroups: CronGroupItem[];
 }
 
 export interface Job extends JobBase {

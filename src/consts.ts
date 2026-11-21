@@ -1,6 +1,7 @@
 export const enum LogTag {
   Spawned = '[Spawned]',
   Error = '[Error]',
+  Warn = '[Warn]',
   Exit = '[Exit]',
 }
 
@@ -15,3 +16,5 @@ export namespace Marker {
   export const END = '@cronend';
   export const END_REGEX = /@cronend\b/;
 }
+
+export type CronBlockMaker = typeof Marker.BEGIN | typeof Marker.END;
