@@ -5,49 +5,56 @@
  */
 import { performance } from 'node:perf_hooks';
 
-import { type UserCronjobConfig, loadConfig } from './config.js';
+import { type UserCronjobConfig, createContext } from './config.js';
 import { log, tryGlobSync } from './utils.js';
 import { runTask, type TaskController } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
 
-export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<TaskController>;
-export async function cronjob(_config?: Partial<UserCronjobConfig>) {
-  const config = loadConfig(_config);
-  log.info(config, `Config loaded: ${JSON.stringify(config)}`);
+export type { UserCronjobConfig } from './config.js';
+export type { TaskController } from './cron/task.js';
 
-  await initialize(config);
+/**
+ * 启动定时任务主理，返回控制器
+ * - 只支持 5 段 cron：分 时 日 月 周
+ * - 同一 dir 只允许一个实例
+ */
+export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<TaskController> {
+  const cx = createContext(config);
+  log.info(cx, `Config loaded: ${JSON.stringify(cx)}`);
+
+  await initialize(cx);
 
   const taskFn = async (now: Date) => {
     // 1、查找CRONJOB_DIR下面的所有符合suffix的文件
-    const filepaths = tryGlobSync(config);
+    const filepaths = tryGlobSync(cx);
     if (!filepaths) {
       return;
     }
     if (filepaths.length === 0) {
-      log.info(config, `No scripts found.`);
+      log.info(cx, `No scripts found.`);
       return;
     }
 
     const performanceNow = performance.now();
-    log.debug(config, `Start`);
+    log.debug(cx, `Start`);
 
     const files = await loadFiles(filepaths);
-    const jobs = await getJobs(config, files, now);
+    const jobs = await getJobs(cx, files, now);
 
     for (let i = 0; i < jobs.length; i++) {
       for (let n = 0; n < jobs[i].count; n++) {
-        run(config, jobs[i]);
+        run(cx, jobs[i]);
       }
     }
 
-    log.debug(config, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
+    log.debug(cx, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
   };
 
-  const task = runTask(config, taskFn);
+  const task = runTask(cx, taskFn);
 
-  log.info(config, `Cronjob start! pid=${process.pid}`);
+  log.info(cx, `Cronjob start! pid=${process.pid}`);
 
   return task;
 }

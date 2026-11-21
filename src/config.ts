@@ -63,7 +63,7 @@ export interface CronjobContext extends UserCronjobConfig {
   jobTimer: NodeJS.Timeout | null;
 }
 
-export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobContext {
+export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobContext {
   const {
     dir = process.cwd(),
     logDir = dir,
