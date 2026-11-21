@@ -12,10 +12,11 @@ import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
 
-export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
+export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<void>;
+export async function cronjob(_config?: Partial<UserCronjobConfig>) {
   try {
-    const config = loadConfig(rawConfig);
-    log(`Config loaded: ${JSON.stringify(config)}`);
+    const config = loadConfig(_config);
+    log(config, `Config loaded: ${JSON.stringify(config)}`);
 
     await initialize(config);
 
@@ -26,12 +27,12 @@ export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
         return;
       }
       if (filepaths.length === 0) {
-        log(`No scripts found.`);
+        log(config, `No scripts found.`);
         return;
       }
 
       const performanceNow = performance.now();
-      log(`Start`);
+      log(config, `Start`);
 
       const files = await loadFiles(filepaths);
       const jobs = await getJobs(config, files, now);
@@ -42,20 +43,22 @@ export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
         }
       }
 
-      log(`Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
+      log(config, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
     };
 
     runTask(config, taskFn);
 
-    log(`Cronjob start! pid=${process.pid}`);
+    log(config, `Cronjob start! pid=${process.pid}`);
+
+    // TODO 这里要改掉让用户自己注册
     // # 必须停止task才能正常退出，正常被pm2重启
     process.on('SIGINT', () => {
-      log(`SIGINT,pid=${process.pid}`);
+      log(config, `SIGINT,pid=${process.pid}`);
       stopTask();
       process.exit(0);
     });
     process.on('SIGTERM', () => {
-      log(`SIGTERM,pid=${process.pid}`);
+      log(config, `SIGTERM,pid=${process.pid}`);
       stopTask();
       process.exit(0);
     });
@@ -64,4 +67,4 @@ export const cronjob = async (rawConfig: Partial<UserCronjobConfig>) => {
     process.exitCode = 1;
     process.exit(1);
   }
-};
+}

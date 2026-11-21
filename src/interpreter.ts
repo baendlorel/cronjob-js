@@ -44,7 +44,7 @@ const interpreters: Record<string, Interpreter> = {
   },
 };
 
-export const hasTsx = tsCmd !== null;
+export const hasTsx = tsCmd !== process.execPath;
 export const pythonCmd = interpreters['.py'].cmd;
 
 export function getDefaultInterpreter(ext: string) {
