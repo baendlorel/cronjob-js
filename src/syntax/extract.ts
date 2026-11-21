@@ -107,7 +107,7 @@ export function getCronExps(filepath: string, lines: string[]): JobItem | null {
       inCronBlock = false;
       continue;
     }
-    list.push({ exp, group });
+    list.push({ exp, group: inCronBlock ? group : 0 });
   }
 
   // 语法错误不予解析

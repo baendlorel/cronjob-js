@@ -9,8 +9,7 @@ export function runTask(config: CronjobConfig, fn: (now: Date) => void) {
 
   setTimeout(() => {
     if (!running) return;
-    // 定时器可能早于边界触发（实测 WSL 下约 -400ms），此时仍属上一分钟，
-    // 直接跑会重复判定同一分钟；重新排到边界即可
+    //! 定时器可能早于边界触发，相当于等了但还没等到呢，再等一会
     if (Date.now() < nextMinute.getTime()) {
       runTask(config, fn);
       return;
