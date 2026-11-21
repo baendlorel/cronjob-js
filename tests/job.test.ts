@@ -35,30 +35,17 @@ describe('getMatchedJob — count 语义', () => {
   });
 
   it('counts a block at most once even if several lines match', () => {
-    const item = itemOf([
-      group('0 9 * * 1-5', 1),
-      group('0 9 * * 6', 1),
-      group('0 9 * * *', 1),
-    ]);
+    const item = itemOf([group('0 9 * * 1-5', 1), group('0 9 * * 6', 1), group('0 9 * * *', 1)]);
     expect(getMatchedJob(cx, item, SAT_9).count).toBe(1);
   });
 
   it('counts each distinct block separately', () => {
-    const item = itemOf([
-      group('0 9 * * *', 1),
-      group('0 9 * * *', 2),
-      group('0 9 * * *', 3),
-    ]);
+    const item = itemOf([group('0 9 * * *', 1), group('0 9 * * *', 2), group('0 9 * * *', 3)]);
     expect(getMatchedJob(cx, item, SAT_9).count).toBe(3);
   });
 
   it('adds block counts to independent line counts', () => {
-    const item = itemOf([
-      group('0 9 * * *', 0),
-      group('0 9 * * *', 0),
-      group('0 9 * * *', 1),
-      group('0 9 * * *', 1),
-    ]);
+    const item = itemOf([group('0 9 * * *', 0), group('0 9 * * *', 0), group('0 9 * * *', 1), group('0 9 * * *', 1)]);
     expect(getMatchedJob(cx, item, SAT_9).count).toBe(3);
   });
 
@@ -80,8 +67,7 @@ describe('getMatchedJob — count 语义', () => {
 });
 
 describe('getJobs — 文件级组合', () => {
-  const file = (filepath: string, content: string) =>
-    ({ filepath, content, error: null }) as const;
+  const file = (filepath: string, content: string) => ({ filepath, content, error: null }) as const;
 
   it('只返回命中的文件，并带上 count', () => {
     const jobs = getJobs(
@@ -140,7 +126,7 @@ describe('loadFiles', () => {
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
 
-    const dir = await mkdtemp(path.join(tmpdir(), 'crontab-js-load-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-load-'));
     const okPath = path.join(dir, 'ok.js');
     const missingPath = path.join(dir, 'missing.js');
     await writeFile(okPath, '// @cron * * * * *\n', 'utf8');
@@ -157,7 +143,7 @@ describe('loadFiles', () => {
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
 
-    const dir = await mkdtemp(path.join(tmpdir(), 'crontab-js-load-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-load-'));
     const paths = Array.from({ length: 205 }, (_, i) => path.join(dir, `f${i}.js`));
     await Promise.all(paths.map((p, i) => writeFile(p, String(i), 'utf8')));
 

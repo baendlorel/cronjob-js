@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { initialize } from '../src/initialize.js';
 import { createTestContext } from './helpers.js';
 
-const tempDir = () => mkdtempSync(path.join(tmpdir(), 'crontab-js-init-'));
+const tempDir = () => mkdtempSync(path.join(tmpdir(), 'cronjob-js-init-'));
 
 describe('initialize', () => {
   it('creates dir and logDir when missing', async () => {

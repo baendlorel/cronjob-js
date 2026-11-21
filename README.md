@@ -1,4 +1,4 @@
-# crontab-js
+# cronjob-js
 
 A minimal, JS-native crontab.
 
@@ -9,20 +9,33 @@ No retries, no catch-up runs, no overlap protection, no process supervision. If 
 ## Install
 
 ```bash
-pnpm add crontab-js
+pnpm add cronjob-js
 # or
-npm i crontab-js
+npm i cronjob-js
 ```
 
 Requires **Node.js >= 22**.
 
 ## Quick start
 
+Valid cron expression:
+
+```text
+ *    *    *    *    *
+ ┬    ┬    ┬    ┬    ┬
+ │    │    │    │    │
+ │    │    │    │    └─ day of week (0-7, 1L-7L) (0 or 7 is Sun)
+ │    │    │    └────── month (1-12, JAN-DEC)
+ │    │    └─────────── day of month (1-31, L)
+ │    └──────────────── hour (0-23)
+ └───────────────────── minute (0-59)
+```
+
 Create a job script:
 
 ```js
 // cronjob/backup.js
-// @cron 0 3 * * * 每天凌晨三点
+// @cron 0 3 * * * # 每天凌晨三点
 console.log('backup', new Date().toISOString());
 ```
 
@@ -30,7 +43,7 @@ Start the runner from your project root:
 
 ```js
 // main.js
-import { cronjob } from 'crontab-js';
+import { cronjob } from 'cronjob-js';
 
 const task = await cronjob({ dir: './cronjob' });
 ```
@@ -43,9 +56,29 @@ pm2 start main.js --name cronjob --log cronjob-runner/main.log
 
 `cronjob()` resolves to a controller with `stop()` / `pause()` / `resume()`.
 
+To see what would run without starting the scheduler, pass `--list` (or `-l`) to the same script:
+
+```bash
+node main.js --list
+```
+
+That prints one line per schedule and exits, before the single-instance lock is taken:
+
+```
+2026/11/22 03:00:00.000  0 3 * * *          backup.js                        /usr/bin/node backup.js
+```
+
+The four columns are **next run time** (formatted with `timezone`), **expression** (block members are indented and marked `[group]`), **path relative to `dir`**, and the command that will be spawned. `--list` goes through the same `write`, so the usual `[INFO] Config loaded: …` line appears before the table. Rows follow glob order (roughly alphabetical within a directory); they are not sorted by next run time.
+
+Files with no `@cron` line are reported with `[WARN] No cron expression: <path>` instead of a row. An expression that parses but has no next occurrence prints `(no next run)` in the time column; one that fails to parse at this stage prints `(invalid)`. In practice extraction only keeps expressions that already parsed, so a malformed line is dropped earlier and never reaches the table. When nothing is found at all, `[INFO] No scripts found in <dir>` is printed and the command exits.
+
+`--list` is checked by scanning `process.argv` in `cronjob()`, so any argument list containing `--list` or `-l` takes this branch — including one meant for your own program. Do not forward those flags.
+
 ## Writing jobs
 
-The cron expression goes in the **header comment** — from line 1 until the first line of real code. For `.ts`/`.js` use `//` or `/** */`, for `.sh` use `#`.
+The cron expression goes in the **header comment** — from line 1 until the first line of real code. For `.ts`/`.js` use `//` or `/** */`, for `.sh` use `#`. Blank lines and other comment lines inside that header are fine; they do not end it.
+
+For `.py` the header may use `#` comments. A `@cron` must sit on one of the `#` lines; the `'''` / `"""` docstring delimiters are accepted in the header but **docstring body lines are not scanned**, so `@cron` inside a multi-line docstring is ignored. Use `# @cron …` for Python jobs.
 
 ```js
 // @cron 0 9 * * *
@@ -62,10 +95,29 @@ echo "every five minutes"
 Rules:
 
 - Only the **5-field** form is supported: `minute hour day-of-month month day-of-week`.
-- Everything after the 5 fields is a human-readable note and is ignored.
+- The first 5 whitespace-separated tokens after `@cron` are the expression; everything after them is a human-readable note and is ignored.
 - Lines without `@cron` are ignored silently.
 - Field syntax is [cron-parser](https://github.com/harrisiirak/cron-parser)'s: ranges, lists, steps, and names such as `MON-FRI` in the day-of-week field.
 - Aliases like `@daily` or `@hourly` are **not** accepted — they are not 5-field expressions.
+
+The marker does not have to be at the start of the line: `// 说明 @cron 0 9 * * *` works, and the text before the marker is ignored.
+
+### A note on trailing words
+
+Because the note is whatever follows the 5 fields, a **6th field that cron-parser can read** is treated as a seconds field and rejected:
+
+```js
+// @cron 0 9 * * * 1   ← "1" parses as a seconds field → error, not scheduled
+```
+
+The check is: take the first 6 tokens and try to parse them. If that succeeds, the line is treated as seconds-level and skipped with an error. If it fails, the first 5 tokens are scheduled and everything after is the note. So anything cron-parser cannot resolve as a field works as a note:
+
+```js
+// @cron 0 9 * * * 每天        ← Chinese note, 6-token parse fails → 5 fields + note
+// @cron 0 9 * * * # 1         ← "#" is not a field → 5 fields + note
+// @cron 0 9 * * * - 1         ← same
+// @cron 0 9 * * * extra words ← "extra" is not an alias → 5 fields + note
+```
 
 ### Multiple schedules in one file
 
@@ -85,7 +137,9 @@ Use a block when you want "either of these, but only once":
 // @cronend
 ```
 
-A block spawns the file **once** when any line inside it matches. Nested or unclosed blocks cause the whole file to be skipped and an error to be logged.
+A block spawns the file **once** when any line inside it matches. Blocks are numbered in the order they appear, and each block counts independently — two blocks that both match in the same minute spawn the file twice. Lines outside any block are ungrouped and each schedules independently.
+
+`@cronbegin` and `@cronend` must each be alone on their line. A line is classified in this order — begin, then end, then expression — so `@cronbegin @cron 0 9 * * *` opens a block and **drops the expression on that line**; put them on separate lines. Nested or unclosed blocks, and an `@cronend` without a matching begin, cause the whole file to be skipped and an error to be logged. A line inside a block that has no `@cron` marker triggers a `[WARN]`, since it is probably a comment that was meant to be a schedule.
 
 ### Second-level expressions are not supported
 
@@ -95,57 +149,81 @@ Six-field expressions are **not** supported:
 // @cron 0 0 9 * * *   ← rejected, error logged, not scheduled
 ```
 
-The runner logs an error and skips that line — it will not silently reinterpret it as a 5-field expression.
+The runner logs an error and skips that line — it will not silently reinterpret it as a 5-field expression. Fewer than 5 fields (`@cron 0 9 * *`) is rejected the same way, with an error; cron-parser would otherwise pad the missing field.
 
 ## Supported script types
 
-| Extension | Interpreter |
-| --- | --- |
-| `.js` | the current Node.js (`process.execPath`) |
-| `.ts` | `tsx` → `ts-node` → Node.js with native type stripping |
-| `.sh` | `bash`, falling back to `sh` |
-| `.py` | `python3` → `python` (optional) |
+| Extension | Interpreter                                            |
+| --------- | ------------------------------------------------------ |
+| `.js`     | the current Node.js (`process.execPath`)               |
+| `.ts`     | `tsx` → `ts-node` → Node.js with native type stripping |
+| `.sh`     | `bash`, falling back to `sh`                           |
+| `.py`     | `python3` → `python` (only if added to `include`)      |
 
-If a `.ts` file has a `#!` line, that shebang wins over the default interpreter. Same for any other extension.
+Extensions with no interpreter mapping are only reached if a script is extracted with one; in practice an unknown extension has no comment syntax for its header, so no `@cron` line is found and nothing is spawned. Such a job would log `[WARN] path=… unsupported extension` if it ever got that far.
+
+If a `.ts` file has a `#!` line, that shebang wins over the default interpreter. Same for any other extension. The shebang is parsed as `command args...`, so `#!/usr/bin/env node` runs `/usr/bin/env node <script>` and `#!/bin/bash -e` runs `/bin/bash -e <script>`.
 
 If `tsx` is not installed, `.ts` still runs under Node.js directly, but not every TypeScript syntax is supported — a warning is logged at startup.
+
+`.py` is only used if you add it to `include`; the default glob does not match it.
 
 ## Logs
 
 Everything goes to the runner's stdout (use `pm2 --log` to persist it) plus a per-job log file:
 
-- **Runner log**: one line per event — config loaded, job spawned, job exited, errors.
+- **Runner log**: one line per event — `[INFO]`, `[WARN]`, `[ERROR]`, `[SPAWN]`, `[EXIT]`, `[DEBUG]`. The three job lifecycle lines are:
   ```
-  2026-11-21 09:00:00.017 [Spawn] path=daily/report.js pid=12345
-  2026-11-21 09:00:04.210 [Exit]  path=daily/report.js pid=12345 code=0 signal=null
+  2026/11/21 09:00:00.017 [SPAWN] path=daily/report.js pid=12345
+  2026/11/21 09:00:04.210 [EXIT] path=daily/report.js pid=12345 code=0 signal=null
+  2026/11/21 09:00:00.018 [ERROR] path=daily/report.js pid=-1 Error: spawn ENOENT
   ```
-- **Job log**: `<logDir>/<relative-path>.log`, appended. Each job's own stdout/stderr goes here.
+  `[ERROR]` uses `pid=-1` when the process never started.
+- **Timestamps** are `yyyy/MM/dd HH:mm:ss.SSS` in `timezone` (that is `zh-CN` `Intl.DateTimeFormat` output).
+- **Job log**: `<logDir>/<relative-path>.log`, appended, with the `.log` suffix after the full filename (`daily/report.js` → `<logDir>/daily/report.js.log`). Each job's own stdout/stderr goes here; the pid is only in the runner log.
+- **Debug**: a `[DEBUG] Start` / `[DEBUG] Finished in Nms` pair wraps each tick that found at least one script. If `dir` has no matching scripts the runner logs `[INFO] No scripts found.` instead and skips the pair.
 
 `path` in the runner log is always relative to `dir`.
+
+Replace `write` to send the runner log somewhere else (a file, a logger, pm2's stdout). It receives the tag already formatted as `[INFO]` etc.:
+
+```js
+await cronjob({
+  dir: './cronjob',
+  write(tag, ...args) {
+    myLogger.log(tag, ...args);
+  },
+});
+```
 
 ## API
 
 ### `cronjob(config?): Promise<TaskController>`
 
-Starts the minute-based scheduler. Immediately takes a single-instance lock keyed by `dir` — a second runner on the same directory throws `cronjob-runner already running`.
+Starts the minute-based scheduler. Immediately takes a single-instance lock keyed by a hash of `dir` — a second runner on the same directory throws `cronjob-runner already running`. The lock is an abstract Unix socket, so the OS releases it when the process dies, including `SIGKILL`.
+
+If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule table and calls `process.exit(0)` instead of starting the scheduler. No lock is taken in that branch.
 
 ### `UserCronjobConfig`
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `dir` | `string` | `process.cwd()` | Directory scanned for job scripts. |
-| `logDir` | `string` | same as `dir` | Where per-job logs are written. |
-| `include` | `string[]` | `['**/*.{ts,js,sh}']` | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python. |
-| `exclude` | `string[]` | `['node_modules/', '.git', '.vscode', '.claude', '__pycache__']` | Glob patterns to skip. |
-| `timezone` | `string` | `'Asia/Shanghai'` | IANA timezone used for both cron matching and log timestamps. |
-| `jobcwd` | `string \| (scriptPath: string) => string` | same as `dir` | Working directory for spawned jobs. Pass a function to derive it per script. |
+| Option     | Type                                       | Default                                                          | Description                                                                                                                                                       |
+| ---------- | ------------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`      | `string`                                   | `process.cwd()`                                                  | Directory scanned for job scripts. Created if missing.                                                                                                            |
+| `logDir`   | `string`                                   | same as `dir`                                                    | Where per-job logs are written. Created if missing.                                                                                                               |
+| `include`  | `string[]`                                 | `['**/*.{ts,js,sh}']`                                            | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python.                                                                           |
+| `exclude`  | `string[]`                                 | `['node_modules/', '.git', '.vscode', '.claude', '__pycache__']` | Glob patterns to skip (passed to `fs.glob`'s `exclude`).                                                                                                          |
+| `timezone` | `string`                                   | `'Asia/Shanghai'`                                                | IANA timezone used for cron matching and for the `timeFormat` timestamps.                                                                                         |
+| `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                                                    | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
+| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)`                                | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
+
+Invalid config throws a `TypeError` naming the option (`dir`, `logDir`, `include`, …); an unknown `timezone` throws a `RangeError` from `Intl.DateTimeFormat`.
 
 ### `TaskController`
 
 ```ts
 interface TaskController {
-  stop(): void;    // clears the pending timer, sets state to Stopped
-  pause(): void;   // pauses the runner; the pending timer keeps ticking
+  stop(): void;    // clears the pending timer, sets state to Stopped; resume() is a no-op after this
+  pause(): void;   // the timer keeps ticking but the callback is not run
   resume(): void;  // resumes a paused runner
 }
 ```
@@ -159,7 +237,13 @@ Every minute the runner:
 3. parses the `@cron` lines with `cron-parser`, using `timezone`,
 4. spawns matching scripts, detached and unref'd, with stdout/stderr redirected to their log file.
 
+There is no in-memory cache: files are re-read and re-parsed every minute, so editing a script's `@cron` line takes effect on the next tick without a restart.
+
 The first tick is aligned to the next minute boundary. If the timer fires a few milliseconds early (common on WSL), it waits for the boundary instead of running the same minute twice.
+
+The next tick is scheduled before the current one runs, so a slow file read or a throwing job does not break the chain. An exception or rejected promise from the tick is logged as one `[ERROR] Task tick failed:` line and nothing else — the next minute proceeds normally.
+
+At startup the runner also warns about a missing `tsx` (only matters for `.ts`) and reports whether `python3`/`python` was found (only matters if you included `.py`).
 
 ## Design limits
 
@@ -170,9 +254,11 @@ These are deliberate, not missing features:
 - **No overlap protection.** A long job will overlap with its next run.
 - **No process management.** Jobs are detached; the runner does not watch or kill them.
 - **No exit-code alerts.** Non-zero exits are logged; read the job log if you care.
+- **No job lifecycle hooks.** There is no callback for "job started" or "job finished"; the log lines are the only signal.
+- **The timer is minute-aligned, not second-aligned.** If the process is busy or the host is suspended across a boundary, the tick happens when the event loop gets to it, and there is no catch-up for the missed minute.
 
 The runner itself is kept alive by pm2. If the runner dies, nothing runs until pm2 restarts it.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

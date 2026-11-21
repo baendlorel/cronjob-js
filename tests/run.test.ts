@@ -19,7 +19,6 @@ vi.mock('node:child_process', async (importOriginal) => {
 const { spawn } = await import('node:child_process');
 const { run } = await import('../src/run.js');
 
-
 const spawnMock = vi.mocked(spawn);
 
 /** 足够像 ChildProcess 的假进程：由测试 emit 事件来驱动 run() 的回调 */
@@ -47,14 +46,17 @@ interface Harness {
 
 const makeHarness = (opts: { ext?: string; pid?: number; cmd?: string } = {}): Harness => {
   const ext = opts.ext ?? '.js';
-  const dir = mkdtempSync(path.join(tmpdir(), 'crontab-js-run-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'cronjob-js-run-'));
   const relpath = path.join('sub', `job${ext}`);
   const filepath = path.join(dir, relpath);
   mkdirSync(path.dirname(filepath), { recursive: true });
   writeFileSync(filepath, '// @cron * * * * *\n', 'utf8');
 
   const logs: Array<{ tag: string; args: any[] }> = [];
-  const record = (tag: string) => (...args: any[]) => logs.push({ tag, args });
+  const record =
+    (tag: string) =>
+    (...args: any[]) =>
+      logs.push({ tag, args });
   const cx = {
     dir,
     logDir: dir,
@@ -95,9 +97,7 @@ const isClosed = (fd: number) => {
 };
 
 const fdOf = (_h: Harness) => (spawnMock.mock.calls[0][2]!.stdio as unknown[])[1] as number;
-const messages = (h: Harness, tag: string) =>
-  h.logs.filter((l) => l.tag === tag).map((l) => l.args[0]);
-
+const messages = (h: Harness, tag: string) => h.logs.filter((l) => l.tag === tag).map((l) => l.args[0]);
 
 beforeEach(() => {
   spawnMock.mockReset();
@@ -235,7 +235,15 @@ describe('run — 异常路径', () => {
 
   it('logs an [ERROR] with pid=-1 when jobcwd throws', () => {
     const h = makeHarness();
-    run({ ...h.cx, jobcwd: () => { throw new Error('bad cwd'); } }, h.job);
+    run(
+      {
+        ...h.cx,
+        jobcwd: () => {
+          throw new Error('bad cwd');
+        },
+      },
+      h.job,
+    );
     expect(spawnMock).not.toHaveBeenCalled();
     expect(messages(h, Tag.Error)).toEqual([`path=${h.relpath} pid=-1`]);
   });

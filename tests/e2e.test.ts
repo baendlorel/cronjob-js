@@ -10,7 +10,7 @@ import { cronjob } from '../src/index.js';
 /** 上海时间 12:00:30.500，让首轮在 29.5s 后触发 */
 const START = new Date('2026-11-21T12:00:30.500+08:00');
 
-const tempDir = () => mkdtempSync(path.join(tmpdir(), 'crontab-js-e2e-'));
+const tempDir = () => mkdtempSync(path.join(tmpdir(), 'cronjob-js-e2e-'));
 
 const writeJob = (dir: string, name: string, content: string) => {
   const p = path.join(dir, name);

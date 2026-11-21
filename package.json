@@ -1,6 +1,6 @@
 {
-  "name": "crontab-js",
-  "version": "0.0.1",
+  "name": "cronjob-js",
+  "version": "0.0.2",
   "description": "A minimal crontab for JavaScript and TypeScript: write a 5-field cron expression in a script's header comment, and the script is spawned when it matches. Complete TypeScript types included.",
   "description_zh": "极简的 JS 版 crontab：把 5 段 cron 写在脚本头部注释里，到点就运行；完整 TS 类型支持。",
   "type": "module",
@@ -64,6 +64,7 @@
     "prettier": "^3.10.1",
     "tsdown": "^0.23.7",
     "tslib": "^2.9.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"
   },

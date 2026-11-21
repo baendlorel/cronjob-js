@@ -9,7 +9,7 @@ import { tryGlobSync } from '../src/utils.js';
 import { createTestContext } from './helpers.js';
 
 const makeTree = (files: string[]) => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'crontab-js-glob-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'cronjob-js-glob-'));
   for (const f of files) {
     const abs = path.join(dir, f);
     mkdirSync(path.dirname(abs), { recursive: true });
@@ -44,7 +44,11 @@ describe('tryGlobSync — 过滤', () => {
   it('uses the default include: ts/js/sh only', () => {
     const dir = makeTree(['a.ts', 'b.js', 'c.sh', 'd.py', 'e.md', 'f.json']);
     const { cx } = createTestContext({ dir });
-    expect(tryGlobSync(cx)!.map((p) => path.extname(p)).sort()).toEqual(['.js', '.sh', '.ts']);
+    expect(
+      tryGlobSync(cx)!
+        .map((p) => path.extname(p))
+        .sort(),
+    ).toEqual(['.js', '.sh', '.ts']);
   });
 
   it('honours the default excludes (node_modules, .git, .vscode, .claude, __pycache__)', () => {

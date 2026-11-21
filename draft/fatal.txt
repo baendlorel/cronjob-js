@@ -85,7 +85,7 @@ cronjob-runner 问题清单
         两分钟后仍在正常 tick（ticks=2）。
 
 ✅ F22 package.json 元信息还是 fluxion 的
-   name=crontab-js，description/description_zh 重写，homepage/repository/bugs 指向本仓库，
+   name=cronjob-js，description/description_zh 重写，homepage/repository/bugs 指向本仓库，
    files=[dist, README.md]，exports 补上 ESM 的 types 分支，vitest 移出 dependencies。
 
 ✅ 附 cronjobConfig 模块级全局单例 → 已删除，配置只经 cx 传递。
