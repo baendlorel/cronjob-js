@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest';
+
+import { getDefaultInterpreter } from '../src/interpreter.js';
+
+/**
+ * 解释器映射在模块加载时就探测了一次 PATH，因此不重新 mock spawnSync，
+ * 只断言“当前机器上能确定的部分”，并把可选项都写进枚举。
+ * - 机器上一定有 node（测试本身就在跑）
+ * - bash/sh/python3 在不同环境不一定存在，用集合断言
+ */
+describe('getDefaultInterpreter', () => {
+  it('.js 总是走当前 node', () => {
+    expect(getDefaultInterpreter('.js')).toEqual({ cmd: process.execPath, args: [] });
+  });
+
+  it('.ts 走 tsx / ts-node / 当前 node 之一', () => {
+    const { cmd, args } = getDefaultInterpreter('.ts');
+    expect([process.execPath, 'tsx', 'ts-node']).toContain(cmd);
+    expect(args).toEqual([]);
+  });
+
+  it('.sh 走 bash 或 sh', () => {
+    expect(['bash', 'sh']).toContain(getDefaultInterpreter('.sh').cmd);
+  });
+
+  it('.py 走 python3 / python / none', () => {
+    expect(['python3', 'python', 'none']).toContain(getDefaultInterpreter('.py').cmd);
+  });
+
+  it('未知扩展返回 none，而不是 undefined', () => {
+    expect(getDefaultInterpreter('.rb')).toEqual({ cmd: 'none', args: [] });
+    expect(getDefaultInterpreter('')).toEqual({ cmd: 'none', args: [] });
+    expect(getDefaultInterpreter('no-extension')).toEqual({ cmd: 'none', args: [] });
+  });
+
+  it('显式传入 none 也返回 none', () => {
+    expect(getDefaultInterpreter('none').cmd).toBe('none');
+  });
+
+  it('每次返回同一个冻结之外的共享对象，不做防御性拷贝', () => {
+    // 这里固定住现状：调用方不要就地修改返回对象
+    expect(getDefaultInterpreter('.js')).toBe(getDefaultInterpreter('.js'));
+  });
+});
