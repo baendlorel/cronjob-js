@@ -59,6 +59,8 @@ export interface CronjobContext extends UserCronjobConfig {
    * The current state of the cronjob.
    */
   jobState: CronjobState;
+
+  jobTimer: NodeJS.Timeout | null;
 }
 
 export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobContext {
@@ -109,5 +111,6 @@ export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConte
       timeZone: timezone,
     }),
     jobState: CronjobState.Running,
+    jobTimer: null,
   };
 }

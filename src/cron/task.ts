@@ -7,7 +7,7 @@ export function runTask(cx: CronjobContext, fn: (now: Date) => void) {
   const nextMinute = new Date(now.getTime() + 60000);
   nextMinute.setSeconds(0, 0);
 
-  setTimeout(() => {
+  cx.jobTimer = setTimeout(() => {
     if (!running) return;
     //! 定时器可能早于边界触发，相当于等了但还没等到呢，再等一会
     if (Date.now() < nextMinute.getTime()) {
