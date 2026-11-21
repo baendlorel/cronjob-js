@@ -1,6 +1,6 @@
 cronjob-runner 问题清单
-最后更新：2026-11-21（第三轮，cron-parser + cx 重构之后）
-检查版本：main @ d718474，工作区干净
+最后更新：2026-11-21（第四轮，logger / cron-parser / cx 重构之后）
+检查版本：main @ 79c755f，工作区干净
 运行环境：Node v26.13.1 / WSL2
 
 约定：
@@ -12,105 +12,92 @@ cronjob-runner 问题清单
 ══ 已修复 ══════════════════════════════
 
 ✅ F1 定时器把「排定时器时的 now」当成「本轮时间」，导致晚一分钟、同一分钟跑两次
-   现在回调里取 new Date()，且若 Date.now() 早于分钟边界会重排回边界。
-   实测 3 分钟：09:18:00 / 09:19:00 / 09:20:00，每分钟恰好一次。
-   反向验证：模拟定时器提前 400ms 触发，仍每分钟一次。
+   回调里取 new Date()，并截到分钟（setSeconds(0,0)）；若早于边界触发则重排回边界。
+   实测 3 分钟每分钟恰好一次；模拟提前 400ms 触发同样每分钟一次。
 
 ✅ F2 glob 返回相对路径，导致非 cwd 的 dir 下所有任务 ENOENT
    tryGlobSync 现在返回绝对路径，顺带支持 exclude。
-   实测 dir='jobs' 从上级目录启动：读取、spawn、日志路径都正确。
 
 ✅ F3 shebang 整行被当成可执行文件名（#!/usr/bin/env node → spawn ENOENT）
-   getShebang 现在返回 {cmd, args}。
-   实测 env node / bash -e / python3 / env tsx / bash 五种首行都能跑。
+   getShebang 返回 {cmd, args}；env node / bash -e / python3 / bash 均已实测。
 
 ✅ F4 用 PATH 检测 tsx 却用模块解析加载，.ts 任务静默失败
-   现在 cmd = tsx|ts-node|process.execPath，检测与启动同一条 PATH。
-   实测：有 tsx 时由 tsx 拉起；无 tsx 时回退 node，Node 22/26 都能跑通 .ts。
+   cmd = tsx|ts-node|process.execPath，检测与启动同一条 PATH。
+   无 tsx 时回退 node，Node 22/26 都能跑通 .ts。
 
 ✅ F5 同一文件命中多条 @cron 只 spawn 一次（run() 忽略 count）
-   index.ts 现在按 count 循环。
-   实测：块外 2 条→2 次；块内 2 条→1 次；块内 1+块外 2→3 次。
+   index.ts 按 count 循环：块外 2 条→2 次；块内 2 条→1 次；块内 1+块外 2→3 次。
 
 ✅ F6 @cronend 后 group 不归零，块外的 @cron 被并进上一个块
    入列表时写 group: inCronBlock ? group : 0，块外天然为 0。
-   复核：块+块外 2 行→3 次；两块斜接→2 次；嵌套/未闭合/孤立 end 均报错返回 null。
+   嵌套/未闭合/孤立 end 均报错并返回 null。
 
 ✅ F7 @cron 后面的说明文字导致整条配置被静默丢弃
-   现在按空白切 token，取前 5 段解析。
-   实测「0 9 * * * 每天九点」正常命中。
-   代价：秒级与段数不足的防线跟着丢了 → 见 F12 / F13。
+   按空白切 token，取前 5 段解析；「0 9 * * * 每天九点」正常命中且无噪音日志。
 
-✅ F8 engines 声明 Node >=16，实际需要 22+ 的 fs.globSync
-   package.json 已改为 >=22.0.0。
+✅ F8 engines 声明 Node >=16，实际需要 22+ 的 fs.globSync → 已改为 >=22.0.0。
 
 ✅ F9 initialize()（单实例锁 / 建目录 / 运行时告警）从未被调用
-   cronjob() 改为 async 并 await initialize。
-   实测：同 dir 起第二个进程报 already running 并以 1 退出；目录自动创建。
+   cronjob() 为 async 并 await initialize；同 dir 第二实例报 already running 并退出。
 
 ✅ F11 cronjob() 用了内部类型且无参调用编译不过
-   签名已改为 Partial<UserCronjobConfig>，UserCronjobConfig 已导出。
+   签名 Partial<UserCronjobConfig>，UserCronjobConfig / TaskController 均已导出。
+
+✅ F12 秒级表达式没有被拒绝，反而被当成另一条 5 段表达式调度
+   extract.ts 现在：tokens >= 6 且前 6 段可解析 → 记 Error 并 return null。
+   实测：0 0 9 * * * / */5 * * * * * 均被拒绝且不调度；
+        「0 9 * * * 每天九点」正常命中，不再有假 Error。
+
+✅ F13 段数不足的表达式被 cron-parser 自动补齐，变成另一条定时
+   parse 之前先挡 tokens.length < 5。
+   实测：0 9 * * / * * * * 均记 Error 并 return null（不再被补成 0 * 0 9 * *）。
+
+✅ F14 matches() 手比 fields，丢掉了 L 与 dom/dow 的 OR 语义
+   matches() 现在直接 expression.includesDate(d)。
+   实测：0 9 L * * 于 11/30 命中、11/21 不命中；
+        0 9 24 * 1 于周一 23 号与周二 24 号都命中（OR 语义恢复）。
 
 ✅ F16 hasTsx 恒为 true，tsx 缺失告警永不触发
-   现在 hasTsx = tsCmd !== process.execPath。
-   实测：PATH 去掉 tsx/ts-node 后 hasTsx=false，告警可正常输出。
+   hasTsx = tsCmd !== process.execPath；去掉 PATH 里的 tsx/ts-node 后告警正常输出。
 
-✅ F17 example/main.js 无参调用 cronjob() 编译不过
-   签名参数已改为可选，example 现在能编译。
+✅ F17 example/main.js 无参调用 cronjob() 编译不过 → 参数已可选。
 
-✅ 附 cronjobConfig 模块级全局单例
-   已删除，配置只经 cx 传递。
+✅ F20 run() 的异常不进主日志
+   run.ts 的 catch 现在走 cx.log.err(`path=<相对路径> pid=-1`, e)。
+   spawn 前的异常（mkdir / openSync / jobcwd 抛错）都能在主日志定位。
+
+✅ F22 package.json 元信息还是 fluxion 的
+   name=crontab-js，description/description_zh 重写，homepage/repository/bugs 指向本仓库，
+   files=[dist, README.md]，exports 补上 ESM 的 types 分支，vitest 移出 dependencies。
+
+✅ 附 cronjobConfig 模块级全局单例 → 已删除，配置只经 cx 传递。
+✅ 附 全局 log 单例 → 已改为 cx.log.*，实现可经 config.write 替换。
 
 
 ══ 未修复 ══════════════════════════════
 
-🔴 F12 秒级表达式没有被拒绝，反而被当成另一条 5 段表达式调度
-   位置：src/syntax/extract.ts:50-58
-   现状：不管 6 段能否解析，都落回 tokens.slice(0,5) 去调度；
-        而且「6 段解析失败」才打 Error，语义正好反了。
-   实测：@cron 0 0 9 * * *  →  解析为 0 0 0 9 * *，12/09 00:00 真的 spawn
-        @cron */5 * * * * * →  解析为 0 */5 * * * *
-        @cron 0 9 * * * 每天九点 → 正常调度，但每分钟多打一条假 Error
-   修法：tokens.length >= 6 且前 6 段可解析 → 记 Error 并 return null；
-        6 段解析失败时不要再打 Error。
-
-🔴 F13 段数不足的表达式被 cron-parser 自动补齐，变成另一条定时
-   位置：src/syntax/extract.ts:58
-   实测：@cron 0 9 * * → 解析为 0 * 0 9 * *，12/09 00:00 命中
-   修法：parse 之前先判断 tokens.length < 5 → return null
-        （@daily 这类单 token 别名可单独放行；空串也会被 parse 成 0 * * * * *）
-
-🟠 F14 matches() 手比 fields，丢掉了 L 与 dom/dow 的 OR 语义
-   位置：src/cron/parse.ts:20-32
-   实测（对照库的 includesDate）：
-     @cron 0 9 L * *  于 11/30 09:00  库=true，matches=false
-     @cron 0 9 24 * 1 于周一 23 号    库=true，matches=false
-   修法：直接 expression.includesDate(date)。
-
 🟡 F18 src/list.ts 已完全失效
-   npx tsc --noEmit 报 5 个错，是当前唯一编译不过的文件：
-   - import 已删除的 cron-fast
-   - tryGlobSync / getJobItem 都少传参数
-   - 把 JobItem 当数组迭代
-   不在构建入口，不影响运行。要么按 TODO 重写成 crontab -l，要么删掉。
+   现状（npx tsc --noEmit，唯一编译不过的文件）：
+     src/list.ts(7,15):  Expected 1 arguments, but got 0   ← tryGlobSync 需要 cx
+     src/list.ts(12,16): Expected 3 arguments, but got 1   ← getJobItem 需要 cx/filepath/lines
+     src/list.ts(13,21): Property 'length' does not exist on type 'JobItem'
+     src/list.ts(17,32): Type 'JobItem' must have a '[Symbol.iterator]()' method
+     src/list.ts(18,49): Cannot find name 'nextRun'      ← 随 cron-fast 一起删掉了
+   不在构建入口，不影响运行，但 pnpm check 会红。
+   要么按 TODO 重写成 crontab -l 的效果，要么直接删掉。
 
-🟡 F19 主日志格式与 CLAUDE.md 约定不一致
-   实际：[Spawned] / [Error] / [Exit]，path 是绝对路径
-   CLAUDE.md：JOBSPWD / JOBERR / JOBEXIT，path=<相对路径>，另有 JOBSPWD 的 cwd 事件
-   日志是这套设计唯一的可观测手段。二选一：改代码，或改 CLAUDE.md。
-
-🟡 F20 run() 的异常不进主日志
-   src/run.ts:61-64 catch 只有 console.error(e)，没有路径也没有 LogTag。
-   spawn 之前的异常（例如 jobcwd 抛错、openSync 失败）无法从主日志定位。
+🟡 F19 日志标记与 CLAUDE.md 约定不一致
+   实际（consts.ts Tag）：[INFO] [SPAWN] [ERROR] [WARN] [EXIT] [DEBUG]
+   CLAUDE.md：JOBSPWD / JOBERR / JOBEXIT 三个事件
+   path 已是相对路径（这部分已对齐）。
+   现在 README 描述的是实现现状，只有 CLAUDE.md 落后。二选一即可，代价都很低。
 
 🟡 F21 taskFn 是 async，runTask 调用它时不 await 也不 catch
-   src/index.ts:22,48
-   getJobs/loadFiles 一旦 reject 就是未处理的 rejection（Node 默认退出进程）。
-   要么让 runTask 接受同步回调并把 await 放进去，要么在 taskFn 内部 try/catch。
-
-🟡 F22 package.json 元信息还是 fluxion 的
-   name / description / homepage / repository / files 全都不对，
-   files 里的 instruction.md、README.md 也不存在。发布前必须改。
+   位置：src/index.ts:28（async taskFn）、src/cron/task.ts:51（fn(noSecondDate) 直接调用）
+   实测：让 taskFn 抛错，进程报 UNHANDLED REJECTION（Node 默认会退出）。
+   getJobs / loadFiles 一旦 reject 就会走到这条路径。
+   修法：runTask 的 fn 返回值包一层 catch；或 taskFn 内部整体 try/catch。
+   注意不要在 runner 层做重试/告警——只记录一条并等下一分钟即可，与设计哲学一致。
 
 
 ══ 环境问题（非代码） ══════════════════════════════

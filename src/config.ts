@@ -48,11 +48,17 @@ export interface UserCronjobConfig {
    * Function to write logs.
    * @param tag The tag for the log entry.
    * @param args The arguments to log.
+   *
+   * default value writes `<dtm> <tag> <args>` to console
    */
   write: (tag: Tag, ...args: any[]) => void;
 }
 
 export interface CronjobContext extends UserCronjobConfig {
+  /**
+   * 时间格式化器，日志与 list 输出都用它
+   */
+  timeFormat: Intl.DateTimeFormat;
   /**
    * 很多地方传参都是这个样子的，因此直接给一个方便不要反复创建
    */
@@ -64,7 +70,8 @@ export interface CronjobContext extends UserCronjobConfig {
    */
   jobState: CronjobState;
 
-  jobTimer: NodeJS.Timeout | null;
+  // 用 ReturnType 而不是 NodeJS.Timeout：消费者的 tsconfig 不一定带 @types/node
+  jobTimer: ReturnType<typeof setTimeout> | null;
 
   log: {
     info: (...args: any[]) => any;
@@ -141,6 +148,7 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     include,
     exclude,
     timezone,
+    timeFormat: formatter,
     jobState: CronjobState.Running,
     jobTimer: null,
     write,

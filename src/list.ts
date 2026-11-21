@@ -1,25 +1,89 @@
 import path from 'node:path';
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+
+import { type CronjobContext, createContext } from './config.js';
 import { tryGlobSync } from './utils.js';
+import { loadFiles } from './syntax/job.js';
 import { getJobItem } from './syntax/extract.js';
+import { parseExp } from './cron/parse.js';
 
-// TODO 这里要重写，要改为可以罗列所有定时表达式+文件名+cmd的形式。就像crontab -l的效果
-
-const files = tryGlobSync();
-
-const cronjobDir = path.join(process.cwd(), 'cronjob');
-
-files?.forEach((v) => {
-  const list = getJobItem(v);
-  if (!list || list.length === 0) {
-    console.log('no exp', path.relative(cronjobDir, v));
+/**
+ * 罗列所有定时表达式，效果类似 `crontab -l`
+ *
+ * 输出四列：下次运行时间、表达式、相对路径、解释器命令
+ * - 块内的多条表达式会缩进显示，并标出 group
+ * - 同一条表达式每次都重新 parse，避免 next() 改动共享对象的内部游标
+ */
+export async function list(cx: CronjobContext) {
+  const filepaths = tryGlobSync(cx);
+  if (!filepaths) {
     return;
   }
-  for (const { exp, group } of list) {
-    const args = [path.relative(cronjobDir, v), nextRun(exp)];
-    if (group > 0) {
-      console.log(`  ${group.toString().padStart(2)} - ${exp.padEnd(20)}`, ...args);
-    } else {
-      console.log(exp.padEnd(27), ...args);
+  if (filepaths.length === 0) {
+    cx.log.info(`No scripts found in ${cx.dir}`);
+    return;
+  }
+
+  const files = await loadFiles(filepaths);
+
+  for (const f of files) {
+    const relativePath = path.relative(cx.dir, f.filepath);
+
+    if (!f.content) {
+      cx.log.err(`Error loading file ${relativePath}: ${f.error}`);
+      continue;
+    }
+
+    const lines = f.content.split('\n').map((line) => line.trim());
+    const item = getJobItem(cx, f.filepath, lines);
+    if (!item) {
+      continue;
+    }
+
+    if (item.flatCronGroups.length === 0) {
+      cx.log.warn(`No cron expression: ${relativePath}`);
+      continue;
+    }
+
+    const invocation = [item.interpreter.cmd, ...item.interpreter.args, relativePath].join(' ');
+
+    for (const { cron, group } of item.flatCronGroups) {
+      const exp = cron.stringify();
+      const next = nextRunText(cx, exp);
+      const prefix = group > 0 ? `  [${group}] ` : '';
+      console.log(`${next.padEnd(24)} ${(prefix + exp).padEnd(18)} ${relativePath.padEnd(32)} ${invocation}`);
     }
   }
-});
+}
+
+/** 表达式在上一次 parse 后可能因 impossible date 抛错，这里只展示、不中断整个列表 */
+function nextRunText(cx: CronjobContext, exp: string) {
+  const parsed = parseExp(cx, exp);
+  if (!parsed) {
+    return '(invalid)';
+  }
+  try {
+    return cx.timeFormat.format(parsed.next().toDate());
+  } catch {
+    return '(no next run)';
+  }
+}
+
+/** 判断当前模块是否是被直接执行的入口（tsx src/list.ts / node dist/index.js list） */
+const isEntry = () => {
+  if (!process.argv[1]) {
+    return false;
+  }
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+};
+
+if (isEntry()) {
+  // 用法：tsx src/list.ts [dir]
+  // 不用顶层 await：CJS 产物不支持 TLA
+  void list(createContext(process.argv[2] ? { dir: process.argv[2] } : {}));
+}
