@@ -1,4 +1,4 @@
-export const enum LogTag {
+export const enum Tag {
   Spawned = '[Spawned]',
   Error = '[Error]',
   Warn = '[Warn]',

@@ -39,6 +39,10 @@ export async function loadFiles(filepaths: string[]): Promise<Array<FileContent>
  * - 不会有人写非常多的 cron 表达式，直接遍历即可
  *
  * ! 仅用于同一个filepath
+ *
+ * @param cx Cronjob 上下文
+ * @param item JobItem 对象
+ * @param now 当前时间，**秒数、毫秒数为0**
  */
 export function getMatchedJob(cx: CronjobContext, item: JobItem, now: Date): Job {
   let count = 0;
@@ -60,6 +64,9 @@ export function getMatchedJob(cx: CronjobContext, item: JobItem, now: Date): Job
 /**
  * 判断文件本轮是否该运行
  *
+ * @param cx Cronjob 上下文
+ * @param files 文件内容数组
+ * @param now 当前时间，**秒数、毫秒数为0**
  * @returns 要跑的 cron，要跑多少次；
  */
 export function getJobs(cx: CronjobContext, files: FileContent[], now: Date): Job[] {

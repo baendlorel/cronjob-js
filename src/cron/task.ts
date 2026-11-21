@@ -46,7 +46,9 @@ export function runTask(cx: CronjobContext, fn: (now: Date) => void): TaskContro
         return;
       }
 
-      fn(new Date());
+      const noSecondDate = new Date();
+      noSecondDate.setSeconds(0, 0);
+      fn(noSecondDate);
       schedule();
     }, nextMinute.getTime() - now.getTime());
   };

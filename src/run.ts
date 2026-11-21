@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from 'node:process';
 
-import { LogTag } from './consts.js';
+import { Tag } from './consts.js';
 import { log } from './utils.js';
 import { CMD_NONE } from './interpreter.js';
 
@@ -17,9 +17,9 @@ export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
       output = null; // ! 防止反复close
     }
   };
+  // 主日志统一用相对路径，绝对路径只用于 spawn
+  const relativePath = path.relative(cx.dir, filepath);
   try {
-    const relativePath = path.relative(cx.dir, filepath);
-
     // 把相对于cron文件夹的路径也带入到日志路径中，这样符合直觉
     const logfile = path.join(cx.logDir, relativePath + '.log');
 
@@ -28,7 +28,7 @@ export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
 
     // 运行这个文件
     if (interpreter.cmd === CMD_NONE) {
-      log(cx, `Unsupported file: ${filepath}`);
+      log(cx, `${Tag.Warn} path=${relativePath} unsupported extension`);
       return;
     }
 
@@ -47,19 +47,20 @@ export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
 
     child.on('error', (e) => {
       closeOutput();
-      log(cx, `${LogTag.Error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
+      log(cx, `${Tag.Error} path=${relativePath} pid=${child.pid ?? '-1'}`, e);
     });
     child.on('spawn', () => {
       closeOutput();
-      log(cx, `${LogTag.Spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
+      log(cx, `${Tag.Spawned} path=${relativePath} pid=${child.pid ?? '-1'}`);
     });
     child.on('exit', (code, signal) => {
       closeOutput();
-      log(cx, `${LogTag.Exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
+      log(cx, `${Tag.Exit} path=${relativePath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
     });
     child.unref();
   } catch (e) {
     closeOutput();
-    console.error(e);
+    // spawn 之前的异常（mkdir/openSync/jobcwd 等）也要进主日志，否则无法定位
+    log(cx, `${Tag.Error} path=${relativePath} pid=-1`, e);
   }
 }
