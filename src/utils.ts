@@ -2,7 +2,7 @@ import type { CronjobConfig } from './config.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const log = (config: CronjobConfig, ...args: any[]) => console.log(config, dtm(config, new Date()), ...args);
+export const log = (config: CronjobConfig, ...args: any[]) => console.log(dtm(config, new Date()), ...args);
 export const dtm = (config: CronjobConfig, date: Date) => config.timeFormat.format(date);
 
 /**

@@ -53,8 +53,6 @@ export interface CronjobConfig extends UserCronjobConfig {
   jobcwd: (scriptPath: string) => string;
 }
 
-export const cronjobConfig: CronjobConfig = {} as CronjobConfig;
-
 export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfig {
   const {
     dir = process.cwd(),
@@ -83,23 +81,24 @@ export function loadConfig(rawConfig?: Partial<UserCronjobConfig>): CronjobConfi
     throw new TypeError('`exclude` must be an array of strings');
   }
 
-  cronjobConfig.dir = dir;
-  cronjobConfig.logDir = logDir;
-  cronjobConfig.jobcwd = typeof jobcwd === 'function' ? jobcwd : () => jobcwd;
-  cronjobConfig.include = include;
-  cronjobConfig.exclude = exclude;
-  cronjobConfig.timezone = timezone;
-  cronjobConfig.timezoneConfig = { timezone, tz: timezone };
-  cronjobConfig.timeFormat = new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    fractionalSecondDigits: 3,
-    hour12: false,
-    timeZone: timezone,
-  });
-  return cronjobConfig;
+  return {
+    dir,
+    logDir,
+    jobcwd: typeof jobcwd === 'function' ? jobcwd : () => jobcwd,
+    include,
+    exclude,
+    timezone,
+    timezoneConfig: { timezone, tz: timezone },
+    timeFormat: new Intl.DateTimeFormat('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3,
+      hour12: false,
+      timeZone: timezone,
+    }),
+  };
 }

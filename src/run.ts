@@ -18,7 +18,6 @@ export function run(config: CronjobConfig, { filepath, interpreter }: Job) {
     }
   };
   try {
-    const parsed = path.parse(filepath);
     const relativePath = path.relative(config.dir, filepath);
 
     // 把相对于cron文件夹的路径也带入到日志路径中，这样符合直觉
@@ -29,7 +28,7 @@ export function run(config: CronjobConfig, { filepath, interpreter }: Job) {
 
     // 运行这个文件
     if (interpreter.cmd === CMD_NONE) {
-      log(`Unsupported file: ${filepath}`);
+      log(config, `Unsupported file: ${filepath}`);
       return;
     }
 
@@ -48,15 +47,15 @@ export function run(config: CronjobConfig, { filepath, interpreter }: Job) {
 
     child.on('error', (e) => {
       closeOutput();
-      log(`${LogTag.Error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
+      log(config, `${LogTag.Error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
     });
     child.on('spawn', () => {
       closeOutput();
-      log(`${LogTag.Spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
+      log(config, `${LogTag.Spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
     });
     child.on('exit', (code, signal) => {
       closeOutput();
-      log(`${LogTag.Exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
+      log(config, `${LogTag.Exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
     });
     child.unref();
   } catch (e) {

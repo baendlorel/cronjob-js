@@ -36,7 +36,7 @@ export function extractCron(
   if (markerIndex === -1) {
     if (inBlock) {
       //! 因为js多行注释会导致"*"开头的行被误认为cron表达式的一部分
-      log(`@cron should be used to mark cron expressions in cron blocks: ${filepath}`);
+      log(config, `@cron should be used to mark cron expressions in cron blocks: ${filepath}`);
     }
     return null;
   }
@@ -51,7 +51,7 @@ export function extractCron(
   const sixExpStr = tokens.slice(0, 6).join(' ');
   const sixExp = parseExp(config, sixExpStr);
   if (!sixExp) {
-    log(`Error: Invalid six-field cron expression: ${sixExpStr}`);
+    log(config, `Error: Invalid six-field cron expression: ${sixExpStr}`);
   }
 
   // 直接返回5位的解析结果
@@ -108,7 +108,7 @@ export function getJobItem(config: CronjobConfig, filepath: string, lines: strin
     if (cron === Marker.BEGIN) {
       // 已经在快中，再次碰到begin，则语法错误不予解析
       if (inCronBlock) {
-        log(`Error: Nested ${Marker.BEGIN} found in file: ${filepath}`);
+        log(config, `Error: Nested ${Marker.BEGIN} found in file: ${filepath}`);
         return null;
       }
       group++;
@@ -119,7 +119,7 @@ export function getJobItem(config: CronjobConfig, filepath: string, lines: strin
     if (cron === Marker.END) {
       // 并不在块中，却直接碰到end，语法错误不予解析
       if (!inCronBlock) {
-        log(`Error: ${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
+        log(config, `Error: ${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
         return null;
       }
       inCronBlock = false;
@@ -131,7 +131,7 @@ export function getJobItem(config: CronjobConfig, filepath: string, lines: strin
 
   // 语法错误不予解析
   if (inCronBlock) {
-    log(`Error: Unclosed ${Marker.BEGIN}/${Marker.END} block in file: ${filepath}`);
+    log(config, `Error: Unclosed ${Marker.BEGIN}/${Marker.END} block in file: ${filepath}`);
     return null;
   }
 
