@@ -12,24 +12,24 @@ let lock: net.Server | null = null;
 /**
  * 检查 tsx 是否可用；没有只警告，纯 js/sh 任务仍可运行
  */
-const orTsx = () => {
+const orTsx = (cx: CronjobContext) => {
   if (!hasTsx) {
-    log(`[Warn] 'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
+    log(cx, `[Warn] 'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
   }
 };
 
-const orPython = () => {
+const orPython = (cx: CronjobContext) => {
   if (pythonCmd) {
-    log(`[Info] python available, .py files will be run by ${pythonCmd}`);
+    log(cx, `[Info] python available, .py files will be run by ${pythonCmd}`);
   } else {
-    log('[Warn] python not available, .py jobs will be ignored');
+    log(cx, '[Warn] python not available, .py jobs will be ignored');
   }
 };
 
 const ensureDir = (cx: CronjobContext) => {
-  mkdirSync(config.dir, { recursive: true });
-  if (config.dir !== config.logDir) {
-    mkdirSync(config.logDir, { recursive: true });
+  mkdirSync(cx.dir, { recursive: true });
+  if (cx.dir !== cx.logDir) {
+    mkdirSync(cx.logDir, { recursive: true });
   }
 };
 
@@ -44,7 +44,7 @@ const acquireLock = (cx: CronjobContext) =>
      * 锁名跟着任务目录走，同一台机器跑多个项目时不会互相误伤。
      * \0 前缀 = 抽象 namespace，不落盘；进程退出（含 kill -9）由内核自动释放。
      */
-    const LOCK_NAME = '\0czdo-cronjob-runner-' + createHash('sha1').update(config.dir).digest('hex').slice(0, 8);
+    const LOCK_NAME = '\0czdo-cronjob-runner-' + createHash('sha1').update(cx.dir).digest('hex').slice(0, 8);
     const server = net.createServer();
     server.once('error', (e: NodeJS.ErrnoException) => {
       reject(e.code === 'EADDRINUSE' ? new Error('cronjob-runner already running') : e);
@@ -58,8 +58,8 @@ const acquireLock = (cx: CronjobContext) =>
 
 export const initialize = async (cx: CronjobContext) => {
   // 先拿锁：重复实例不必再做后面的探测
-  await acquireLock(config);
-  ensureDir(config);
-  orTsx();
-  orPython();
+  await acquireLock(cx);
+  ensureDir(cx);
+  orTsx(cx);
+  orPython(cx);
 };

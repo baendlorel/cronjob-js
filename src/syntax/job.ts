@@ -68,18 +68,18 @@ export function getJobs(cx: CronjobContext, files: FileContent[], now: Date): Jo
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     if (!f.content) {
-      log(`Error loading file ${f.filepath}: ${f.error}`);
+      log(cx, `Error loading file ${f.filepath}: ${f.error}`);
       continue;
     }
 
     const lines = f.content.split('\n').map((line) => line.trim());
-    const jobItem = getJobItem(config, f.filepath, lines);
+    const jobItem = getJobItem(cx, f.filepath, lines);
     if (!jobItem) {
       continue;
     }
 
     // 这里要把shebang算好，matchedjob要运行多少次直接看数字
-    const job = getMatchedJob(config, jobItem, now);
+    const job = getMatchedJob(cx, jobItem, now);
     if (job.count > 0) {
       jobs.push(job);
     }

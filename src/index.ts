@@ -7,7 +7,7 @@ import { performance } from 'node:perf_hooks';
 
 import { type UserCronjobConfig, loadConfig } from './config.js';
 import { log, tryGlobSync } from './utils.js';
-import { runTask, stopTask } from './cron/task.js';
+import { runTask } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
@@ -46,7 +46,7 @@ export async function cronjob(_config?: Partial<UserCronjobConfig>) {
       log(config, `Finished in ${(performance.now() - performanceNow).toFixed(6)}ms`);
     };
 
-    runTask(config, taskFn);
+    const task = runTask(config, taskFn);
 
     log(config, `Cronjob start! pid=${process.pid}`);
 
@@ -54,12 +54,12 @@ export async function cronjob(_config?: Partial<UserCronjobConfig>) {
     // # 必须停止task才能正常退出，正常被pm2重启
     process.on('SIGINT', () => {
       log(config, `SIGINT,pid=${process.pid}`);
-      stopTask();
+      task.stop();
       process.exit(0);
     });
     process.on('SIGTERM', () => {
       log(config, `SIGTERM,pid=${process.pid}`);
-      stopTask();
+      task.stop();
       process.exit(0);
     });
   } catch (e) {
