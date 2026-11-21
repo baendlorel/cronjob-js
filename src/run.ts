@@ -9,7 +9,7 @@ import { LogTag } from './consts.js';
 import { log } from './utils.js';
 import { CMD_NONE } from './interpreter.js';
 
-export function run(config: CronjobContext, { filepath, interpreter }: Job) {
+export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
   let output: number | null = null;
   const closeOutput = () => {
     if (output !== null) {
@@ -18,17 +18,17 @@ export function run(config: CronjobContext, { filepath, interpreter }: Job) {
     }
   };
   try {
-    const relativePath = path.relative(config.dir, filepath);
+    const relativePath = path.relative(cx.dir, filepath);
 
     // 把相对于cron文件夹的路径也带入到日志路径中，这样符合直觉
-    const logfile = path.join(config.logDir, relativePath + '.log');
+    const logfile = path.join(cx.logDir, relativePath + '.log');
 
     // 子目录下的脚本，其日志子目录也要存在，否则 shell 重定向失败、命令不会执行
     fs.mkdirSync(path.dirname(logfile), { recursive: true });
 
     // 运行这个文件
     if (interpreter.cmd === CMD_NONE) {
-      log(config, `Unsupported file: ${filepath}`);
+      log(cx, `Unsupported file: ${filepath}`);
       return;
     }
 
@@ -42,20 +42,20 @@ export function run(config: CronjobContext, { filepath, interpreter }: Job) {
       detached: true,
       env,
       // 子进程 cwd 默认和主程序一样，或者以--cwd=xxx录入
-      cwd: config.jobcwd(filepath),
+      cwd: cx.jobcwd(filepath),
     });
 
     child.on('error', (e) => {
       closeOutput();
-      log(config, `${LogTag.Error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
+      log(cx, `${LogTag.Error} path=${filepath} pid=${child.pid ?? '-1'}`, e);
     });
     child.on('spawn', () => {
       closeOutput();
-      log(config, `${LogTag.Spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
+      log(cx, `${LogTag.Spawned} path=${filepath} pid=${child.pid ?? '-1'}`);
     });
     child.on('exit', (code, signal) => {
       closeOutput();
-      log(config, `${LogTag.Exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
+      log(cx, `${LogTag.Exit} path=${filepath} pid=${child.pid ?? '-1'} code=${code} signal=${signal}`);
     });
     child.unref();
   } catch (e) {

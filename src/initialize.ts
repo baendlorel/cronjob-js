@@ -26,7 +26,7 @@ const orPython = () => {
   }
 };
 
-const ensureDir = (config: CronjobContext) => {
+const ensureDir = (cx: CronjobContext) => {
   mkdirSync(config.dir, { recursive: true });
   if (config.dir !== config.logDir) {
     mkdirSync(config.logDir, { recursive: true });
@@ -38,7 +38,7 @@ const ensureDir = (config: CronjobContext) => {
  * 已被占用则 reject —— 不 process.exit，由宿主决定怎么退。
  * @returns {Promise<void>}
  */
-const acquireLock = (config: CronjobContext) =>
+const acquireLock = (cx: CronjobContext) =>
   new Promise<void>((resolve, reject) => {
     /**
      * 锁名跟着任务目录走，同一台机器跑多个项目时不会互相误伤。
@@ -56,7 +56,7 @@ const acquireLock = (config: CronjobContext) =>
     });
   });
 
-export const initialize = async (config: CronjobContext) => {
+export const initialize = async (cx: CronjobContext) => {
   // 先拿锁：重复实例不必再做后面的探测
   await acquireLock(config);
   ensureDir(config);

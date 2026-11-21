@@ -2,13 +2,13 @@ import type { CronjobContext } from './config.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const log = (config: CronjobContext, ...args: any[]) => console.log(dtm(config, new Date()), ...args);
-export const dtm = (config: CronjobContext, date: Date) => config.timeFormat.format(date);
+export const log = (cx: CronjobContext, ...args: any[]) => console.log(dtm(config, new Date()), ...args);
+export const dtm = (cx: CronjobContext, date: Date) => config.timeFormat.format(date);
 
 /**
  * 返回要处理的文件的绝对路径
  */
-export const tryGlobSync = (config: CronjobContext) => {
+export const tryGlobSync = (cx: CronjobContext) => {
   try {
     return fs
       .globSync(config.include, { cwd: config.dir, exclude: config.exclude })

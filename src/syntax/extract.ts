@@ -19,7 +19,7 @@ import { getShebang } from './shebang.js';
  * @param filepath 文件路径，用于日志输出
  */
 export function extractCron(
-  config: CronjobContext,
+  cx: CronjobContext,
   trimmedLine: string,
   inBlock: boolean,
   filepath: string,
@@ -36,7 +36,7 @@ export function extractCron(
   if (markerIndex === -1) {
     if (inBlock) {
       //! 因为js多行注释会导致"*"开头的行被误认为cron表达式的一部分
-      log(config, `@cron should be used to mark cron expressions in cron blocks: ${filepath}`);
+      log(cx, `@cron should be used to mark cron expressions in cron blocks: ${filepath}`);
     }
     return null;
   }
@@ -49,13 +49,13 @@ export function extractCron(
 
   //! 不支持6个位的
   const sixExpStr = tokens.slice(0, 6).join(' ');
-  const sixExp = parseExp(config, sixExpStr);
+  const sixExp = parseExp(cx, sixExpStr);
   if (!sixExp) {
-    log(config, `Error: Invalid six-field cron expression: ${sixExpStr}`);
+    log(cx, `Error: Invalid six-field cron expression: ${sixExpStr}`);
   }
 
   // 直接返回5位的解析结果
-  return parseExp(config, tokens.slice(0, 5).join(' '));
+  return parseExp(cx, tokens.slice(0, 5).join(' '));
 }
 
 /**
@@ -65,7 +65,7 @@ export function extractCron(
  * @param filepath 文件路径，用于日志输出
  * @param lines 文件内容的每一行
  */
-export function getJobItem(config: CronjobContext, filepath: string, lines: string[]): JobItem | null {
+export function getJobItem(cx: CronjobContext, filepath: string, lines: string[]): JobItem | null {
   const ext = extname(filepath);
   const allowFn = getAllowFn(ext);
 
@@ -99,7 +99,7 @@ export function getJobItem(config: CronjobContext, filepath: string, lines: stri
   let inCronBlock = false;
   let group = 0;
   for (const line of lines) {
-    const cron = extractCron(config, line, inCronBlock, filepath);
+    const cron = extractCron(cx, line, inCronBlock, filepath);
     // 忽略空的
     if (!cron) {
       continue;
@@ -108,7 +108,7 @@ export function getJobItem(config: CronjobContext, filepath: string, lines: stri
     if (cron === Marker.BEGIN) {
       // 已经在快中，再次碰到begin，则语法错误不予解析
       if (inCronBlock) {
-        log(config, `Error: Nested ${Marker.BEGIN} found in file: ${filepath}`);
+        log(cx, `Error: Nested ${Marker.BEGIN} found in file: ${filepath}`);
         return null;
       }
       group++;
@@ -119,7 +119,7 @@ export function getJobItem(config: CronjobContext, filepath: string, lines: stri
     if (cron === Marker.END) {
       // 并不在块中，却直接碰到end，语法错误不予解析
       if (!inCronBlock) {
-        log(config, `Error: ${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
+        log(cx, `Error: ${Marker.END} didn't match ${Marker.BEGIN} in file: ${filepath}`);
         return null;
       }
       inCronBlock = false;
@@ -131,7 +131,7 @@ export function getJobItem(config: CronjobContext, filepath: string, lines: stri
 
   // 语法错误不予解析
   if (inCronBlock) {
-    log(config, `Error: Unclosed ${Marker.BEGIN}/${Marker.END} block in file: ${filepath}`);
+    log(cx, `Error: Unclosed ${Marker.BEGIN}/${Marker.END} block in file: ${filepath}`);
     return null;
   }
 
