@@ -12,6 +12,7 @@ import { getShebang } from './shebang.js';
 /**
  * 从一行文本中提取带标记的 cron 表达式
  * - 只接受5位表达式，不支持秒级
+ * - `@cronutc <5 段>` 是行内指令：这一条按 UTC 解析，不影响其它行
  *
  * @param trimmedLine 已经去掉前导空格的行文本
  * @param inBlock 是否在 @cronbegin 和 @cronend 块中
@@ -30,21 +31,34 @@ export function extractCron(
     return Marker.END;
   }
 
-  const markerIndex = trimmedLine.search(Marker.REGEX);
-  if (markerIndex === -1) {
+  // @cron的index
+  const index = trimmedLine.search(Marker.REGEX);
+  // @cronutc的index
+  const utcIndex = trimmedLine.search(Marker.UTC_REGEX);
+
+  let timezone = cx.timezone;
+  let expStart = -1;
+
+  // 一般都是这个，所以这个排前面，分支预测更好
+  if (index !== -1) {
+    timezone = cx.timezone;
+    expStart = index + Marker.CRON.length;
+  } else if (utcIndex !== -1) {
+    timezone = 'UTC';
+    expStart = utcIndex + Marker.UTC.length;
+  }
+
+  if (expStart === -1) {
     if (inBlock) {
       cx.log.warn(`@cron should be used to mark cron expressions in cron blocks: ${relativePath}`);
     }
     return null;
   }
 
-  // 直接切片，从@cron后面开始获取字符
-  const tokens = trimmedLine
-    .slice(markerIndex + Marker.CRON.length)
-    .split(/\s+/)
-    .filter(Boolean);
+  // 直接切片，从标记后面开始获取字符
+  const tokens = trimmedLine.slice(expStart).split(/\s+/).filter(Boolean);
 
-  // cron-parser 会把 4 段自动补齐成另一条合法表达式，必须在 parse 之前挡住
+  //! 阻止cron-parser 把 4 段自动补齐成另一条合法表达式
   if (tokens.length < 5) {
     cx.log.err(`Invalid cron expression: "${tokens.join(' ')}" in file: ${relativePath}`);
     return null;
@@ -53,14 +67,14 @@ export function extractCron(
   // 前 6 段能解析说明写的是秒级定时，本项目只支持 5 段，整行不调度
   if (tokens.length >= 6) {
     const sixExpStr = tokens.slice(0, 6).join(' ');
-    if (parseExp(cx, sixExpStr, relativePath)) {
-      cx.log.err(`Seconds-level cron is not supported, use 5 fields instead: "${sixExpStr}" in file: ${relativePath}`);
+    if (parseExp(cx, sixExpStr, relativePath, timezone)) {
+      cx.log.err(`6 fields cron is not supported, use 5 fields instead. Found "${sixExpStr}" in file: ${relativePath}`);
       return null;
     }
   }
 
   // 取前 5 段，之后是说明文字
-  return parseExp(cx, tokens.slice(0, 5).join(' '), relativePath);
+  return parseExp(cx, tokens.slice(0, 5).join(' '), relativePath, timezone);
 }
 
 /**
@@ -108,6 +122,8 @@ export function getJobItem(cx: CronjobContext, filepath: string, content: string
   let inCronBlock = false;
   let group = 0;
   for (const line of lines) {
+    // @cronutc 与 @cron 同一行，按行判断时区，不维护跨行状态
+    const timezone = line.search(Marker.UTC_REGEX) !== -1 ? 'UTC' : cx.timezone;
     const cron = extractCron(cx, line, inCronBlock, relativePath);
     // 忽略空的
     if (!cron) {
@@ -135,7 +151,7 @@ export function getJobItem(cx: CronjobContext, filepath: string, content: string
       continue;
     }
 
-    list.push({ cron, group: inCronBlock ? group : 0 });
+    list.push({ cron, group: inCronBlock ? group : 0, timezone });
   }
 
   // 语法错误不予解析

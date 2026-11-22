@@ -40,8 +40,8 @@ describe('example/jobs — 解析结果', () => {
   it('daily-report.js：块外两条各自独立（group 0）', () => {
     const { item } = parse('daily-report.js');
     expect(item!.flatCronGroups).toEqual([
-      { cron: expect.anything(), group: 0 },
-      { cron: expect.anything(), group: 0 },
+      { cron: expect.anything(), group: 0, timezone: 'Asia/Shanghai' },
+      { cron: expect.anything(), group: 0, timezone: 'Asia/Shanghai' },
     ]);
     expect(item!.flatCronGroups.map((g) => g.cron.stringify())).toEqual(['0 9 * * *', '30 18 * * 1-5']);
   });

@@ -51,18 +51,18 @@ export async function list(cx: CronjobContext) {
 
     const invocation = [item.interpreter.cmd, ...item.interpreter.args, relativePath].join(' ');
 
-    for (const { cron, group } of item.flatCronGroups) {
+    for (const { cron, group, timezone } of item.flatCronGroups) {
       const exp = cron.stringify();
-      const next = nextRunText(cx, exp, f.filepath);
-      const prefix = group > 0 ? `  [${group}] ` : '';
+      const next = nextRunText(cx, exp, f.filepath, timezone);
+      const prefix = (group > 0 ? `  [${group}] ` : '') + (timezone === 'UTC' ? 'UTC ' : '');
       console.log(`${next.padEnd(24)} ${(prefix + exp).padEnd(18)} ${relativePath.padEnd(32)} ${invocation}`);
     }
   }
 }
 
 /** 表达式在上一次 parse 后可能因 impossible date 抛错，这里只展示、不中断整个列表 */
-function nextRunText(cx: CronjobContext, exp: string, filepath: string) {
-  const parsed = parseExp(cx, exp, filepath);
+function nextRunText(cx: CronjobContext, exp: string, filepath: string, timezone: string) {
+  const parsed = parseExp(cx, exp, filepath, timezone);
   if (!parsed) {
     return '(invalid)';
   }

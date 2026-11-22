@@ -3,10 +3,17 @@ import { type CronExpression, CronExpressionParser } from 'cron-parser';
 
 /**
  * 非得要try很奇怪，但这是官方推荐的方式
+ *
+ * @param timezone cron 语义使用的时区；默认是 cx.timezone，`@cronutc` 之后传 'UTC'
  */
-export const parseExp = (cx: CronjobContext, exp: string, filepath: string): CronExpression | null => {
+export const parseExp = (
+  cx: CronjobContext,
+  exp: string,
+  filepath: string,
+  timezone: string = cx.timezone,
+): CronExpression | null => {
   try {
-    return CronExpressionParser.parse(exp, { tz: cx.timezone, hashSeed: filepath });
+    return CronExpressionParser.parse(exp, { tz: timezone, hashSeed: filepath });
   } catch {
     return null;
   }

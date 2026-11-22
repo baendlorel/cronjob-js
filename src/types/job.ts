@@ -11,6 +11,8 @@ export interface Interpreter {
 export interface CronGroupItem {
   group: number;
   cron: CronExpression;
+  /** cron 语义所用时区：'UTC'（@cronutc 之后的表达式）或 cx.timezone */
+  timezone: string;
 }
 
 interface JobBase {

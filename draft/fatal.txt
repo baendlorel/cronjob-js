@@ -206,7 +206,12 @@ cronjob-runner 问题清单
      "Clock changes of more than 3 hours are considered to be corrections to the clock."
    即：前跳被跳过的那次会补跑、回拨的重复不重跑；只影响固定时刻，通配符按新时间走；±3h 才算 DST。
    本项目的 tick 只看 wall clock，回拨会重复、前跳会跳过，与 cron 正好相反。
-   结论：不改代码（与 F29 同属"接受为已知行为"），README 的 timezone 说明已写明。
+   处理（不改 tick 语义）：新增行内标记 `@cronutc <5 段>`，只让这一条按 UTC 解析；
+   UTC 无夏令时，对 DST 敏感的定时写它即可规避。`@cron` 的行为保持原样，README 已写明。
+   实现：CronGroupItem 增加 timezone 字段，parseExp 增加可选 timezone 参数，
+   getJobs/--list 用每条表达式自己的 timezone 判断和展示（--list 行首标 UTC）。
+   实测：`@cron 0 9 * * *` 与 `@cronutc 0 9 * * *` 混排时各自按自己的时区命中；
+   上海 09:00 只命中前者，UTC 09:00 只命中后者。
 
 🟡✅ F40 安全：日志文件和单例锁的权限
    (a) 启动时检查 dir / logDir：属主不是当前用户、或 group/other 有写位，直接抛错不启动。

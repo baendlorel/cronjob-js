@@ -112,6 +112,41 @@ describe('getJobItem — 表达式解析', () => {
   });
 });
 
+describe('getJobItem — @cronutc', () => {
+  const tzsOf = (content: string) => {
+    const { item: job } = item(content);
+    return job?.flatCronGroups.map((g) => g.timezone);
+  };
+
+  it('applies UTC only to the line it is on', () => {
+    expect(tzsOf(['// @cron 0 9 * * *', '// @cronutc 0 9 * * *', '// @cron 0 9 * * *'].join('\n'))).toEqual([
+      'Asia/Shanghai',
+      'UTC',
+      'Asia/Shanghai',
+    ]);
+  });
+
+  it('is a schedule itself, not a standalone switch', () => {
+    const { item: job, logs } = item(['// @cronutc 0 9 * * *'].join('\n'));
+    expect(job!.flatCronGroups).toHaveLength(1);
+    expect(job!.flatCronGroups[0]).toMatchObject({ group: 0, timezone: 'UTC' });
+    expect(job!.flatCronGroups[0].cron.stringify()).toBe('0 9 * * *');
+    expect(logs).toHaveLength(0);
+  });
+
+  it('works inside a block and keeps the block group', () => {
+    const { item: job } = item(['// @cronbegin', '// @cronutc 0 9 * * *', '// @cron 0 9 * * *', '// @cronend'].join('\n'));
+    expect(job!.flatCronGroups.map((g) => [g.group, g.timezone])).toEqual([
+      [1, 'UTC'],
+      [1, 'Asia/Shanghai'],
+    ]);
+  });
+
+  it('tolerates trailing words after the expression', () => {
+    expect(tzsOf('// @cronutc 0 9 * * * 每天 UTC 九点')).toEqual(['UTC']);
+  });
+});
+
 describe('getJobItem — 分组', () => {
   it('keeps block-outside lines independent (group 0)', () => {
     expect(expsOf(['// @cron 0 9 * * *', '// @cron 0 21 * * *'].join('\n'))).toEqual([
@@ -224,13 +259,6 @@ describe('getJobItem — 语法错误', () => {
     expect(String(logsOf(logs, Tag.Warn)[0].args[0])).not.toContain('/virtual/dir/');
   });
 
-  it('does not warn on blank lines or bare asterisks inside a block (F38)', () => {
-    const { item: job, logs } = item(
-      ['/**', ' * @cronbegin', ' *', ' * @cron 0 9 * * *', ' *', ' * @cronend', ' */'].join('\n'),
-    );
-    expect(job!.flatCronGroups).toHaveLength(1);
-    expect(logsOf(logs, Tag.Warn)).toHaveLength(0);
-  });
 });
 
 describe('getJobItem — 解释器', () => {

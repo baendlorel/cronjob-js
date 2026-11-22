@@ -101,8 +101,8 @@ const acquireLock = (cx: CronjobContext) =>
 export const initialize = async (cx: CronjobContext) => {
   // 先拿锁：重复实例不必再做后面的探测
   await acquireLock(cx);
-  checkDirPermissions(cx);
   ensureDir(cx);
+  checkDirPermissions(cx);
   orTsx(cx);
   orPython(cx);
 };

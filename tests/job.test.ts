@@ -17,7 +17,11 @@ const SAT_21 = new Date('2026-11-21T21:00:00+08:00');
 /** 上海 2026-11-23 10:00（周一，09:00 的表达式不命中） */
 const MON_10 = new Date('2026-11-23T10:00:00+08:00');
 
-const group = (exp: string, n: number): CronGroupItem => ({ cron: parseExp(cx, exp, '/virtual/dir/x.js')!, group: n });
+const group = (exp: string, n: number): CronGroupItem => ({
+  cron: parseExp(cx, exp, '/virtual/dir/x.js')!,
+  group: n,
+  timezone: cx.timezone,
+});
 const itemOf = (groups: CronGroupItem[], filepath = '/virtual/dir/x.js') => ({
   filepath,
   interpreter: { cmd: 'node', args: [] },

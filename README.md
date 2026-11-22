@@ -82,6 +82,15 @@ The cron expression goes in the **header comment** — from line 1 until the fir
 
 `@cronbegin` / `@cronend` are matched **anywhere in a header line**, including prose. A comment that merely mentions them (`` // see @cronend ``) is treated as the marker, so the file is rejected with a block error rather than scheduled. This is deliberate: a file that fails to parse never runs, which is safer than guessing what the author meant. Keep those words out of notes inside a header.
 
+`@cronutc` is `@cron` with the same 5-field expression, but the expression is matched in **UTC** instead of `timezone`. It is a per-line marker: it applies only to the line it is on and does not change how other lines are matched. Use it when a schedule must not shift with daylight saving time:
+
+```js
+// @cron 0 9 * * *          每天九点（按 timezone）
+// @cronutc 0 9 * * *       每天 09:00 UTC
+```
+
+Everything after the 5 fields is still a note, and `@cronutc` works inside `@cronbegin` / `@cronend` blocks like any other line. `--list` marks those rows with a `UTC` prefix.
+
 For `.py` the header may use `#` comments. A `@cron` must sit on one of the `#` lines; the `'''` / `"""` docstring delimiters are accepted in the header but **docstring body lines are not scanned**, so `@cron` inside a multi-line docstring is ignored. Use `# @cron …` for Python jobs.
 
 ```js
