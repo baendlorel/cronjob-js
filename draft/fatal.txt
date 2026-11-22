@@ -91,14 +91,160 @@ cronjob-runner 问题清单
 ✅ 附 cronjobConfig 模块级全局单例 → 已删除，配置只经 cx 传递。
 ✅ 附 全局 log 单例 → 已改为 cx.log.*，实现可经 config.write 替换。
 
-
-（暂无）
-
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
-══ 环境问题（非代码） ══════════════════════════════
+══ 待修复（第六轮审查）══════════════════════
+检查日期：2026-11-22
+检查版本：main @ 4cac212，工作区干净
+运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
+tsc、oxlint（4 条 warning，见 F41）、vitest 162/162 均通过；下面的问题现有测试都没有覆盖。
 
-- 本机 pnpm build 失败：node_modules 里是 @esbuild/win32-x64，WSL 需要 linux-x64。
-- 本机全局 tsx 自带的 esbuild 也是 win32 版，直接 `tsx xxx.ts` 同样报错，
-  所以 F4 的 tsx 路径只能靠解释器映射验证，不是靠真实执行。
+🔴 F23 `H`（hash）字段每次 parse 都随机取值，而 runner 每分钟都重新 parse
+   cron-parser 5 支持 H，不传 hashSeed 时每次随机：同一条 H * * * * 连续 parse 5 次，
+   minute 依次是 10 / 1 / 55 / 54 / 28。
+   模拟 6 小时逐分钟 tick，H * * * * 每小时 spawn 次数为 [1,0,2,2,1,2]（应为每小时 1 次）。
+   --list 显示的下次运行时间也和实际调度对不上。
+   修复：parseExp 传 hashSeed（如相对路径），实测同一 seed 3 次都是 4，换文件变成 55；
+        或者在 extract 里直接拒绝 H。
+
+🟠 F24 Node 22.0–22.13 上一个任务都不跑（F8 的 >=22.0.0 结论有误）
+   fs.globSync 的 exclude 从 22.14.0 起才接受 glob 数组（nodejs#56489），之前只接受函数。
+   用 v22.13.1 跑 dist：启动时照常打印 "Cronjob start!"，之后每分钟一条
+   [ERROR] Error while globbing scripts. ERR_INVALID_ARG_TYPE，什么都不 spawn。
+   22.14–22.16 还会往 stderr 打一次 ExperimentalWarning（22.17.0 才去掉，nodejs#58236）。
+   修复：engines 改为 >=22.14.0，README 里的 "Requires Node.js >= 22" 同步修改。
+
+🟠 F25 单例锁的 key 直接取未规范化的 cx.dir
+   同一目录换个写法就能双开：'./g'、'/tmp/cjrepro/g'、'/tmp/cjrepro/g/' 三次 initialize 都拿到了锁，
+   两个 runner 同时跑时，每个任务每次都会 spawn 两遍。
+   不同目录之间反而会冲突：projA 和 projB 都照 README 写 dir: './cronjob'，
+   hash 相同，后启动的 projB 报 "cronjob-runner already running"，起不来。
+   这与 initialize.ts 注释"同一台机器跑多个项目时不会互相误伤"正好相反。
+   修复：createContext 里先对 dir/logDir 做 path.resolve（必要时再 realpath），锁 key 用规范化后的路径。
+
+🟠 F26 pm2 cluster 模式下单例锁失效
+   cluster worker 的 listen 由 primary 代为执行并共享句柄，两个 worker 能同时拿到同名锁。
+   用 node:cluster fork 2 个 worker 模拟（pm2 -i 基于 node:cluster，未在真实 pm2 -i 上跑）：
+   两个 worker 都 ACQUIRED，所有任务会被跑 N 次。
+   修复：server.listen({ path: LOCK_NAME, exclusive: true })，实测第二个 worker 得到 EADDRINUSE。
+
+🟠 F27 按 README 的 pm2 命令部署时，pm2 restart / stop 会杀掉正在跑的任务
+   pm2 默认开启 treekill，按进程树杀子进程，detached + unref 挡不住。
+   pm2 7.1.2 实测（fork 模式）：pm2 restart 时 pm2.log 记录 "process tree killed (2 pids)"，
+   正在跑的 long.js 被杀，任务日志只有开头一行，主日志也没有 [EXIT]（runner 已经先退出）。
+   加上 --no-treekill 后任务存活。
+   这与 CLAUDE.md 的 "spawn 后 unref，不等待、不杀" 不符，而且每次部署都会静默发生。
+   修复：README 和 example 里的 pm2 命令加 --no-treekill（或在 ecosystem 里写 treekill: false）。
+
+🟠 F28 pause() 之后，进程会在下一个分钟边界自行退出（code 0）
+   定时器到点看到 Paused 就直接 return，不再排下一轮；锁 server 又是 unref 的，事件循环就空了。
+   实测（结构与 example/main.js 相同）：:56 调用 pause()，:00.005 进程以 code 0 退出。
+   pm2 对 code 0 也会自动重启，重启后状态回到 Running，暂停被悄悄取消。
+   TaskController.pause 的注释"定时器继续走"和 resume 里"暂停期间定时器没有停"都与实际不符。
+   修复：Paused 时照常 schedule()，只跳过 fn。
+
+🟠 F29 系统时钟往回拨时，同一分钟会再跑一次
+   tick 只看"当前时间截到分钟"，不记录上一次跑的是哪一分钟。
+   模拟回拨 90s：tick#1 跑了 01:23，回拨后 tick#2 仍是 01:23，这一分钟命中的任务全部再 spawn 一次。
+   触发条件：NTP 或手动校时把偏快的时钟拨回来。
+   修复：记住上一次执行的分钟，now <= last 时跳过。这是去重，不是补跑。
+
+🟡 F30 dir 里有 FIFO 或卡住的挂载时，runner 会静默停摆（触发少见，后果是所有任务停跑）
+   readFile 打开 FIFO 会一直阻塞，占住 libuv 线程池里的一个线程（默认 4 个）。
+   实测：1 个 FIFO 加 1 个正常的 real.js，这一轮的 Promise.all 永远不结束，real.js 也不会 spawn；
+   连续 4 轮之后，与本项目无关的 fs.readFile('/etc/hostname') 也挂起。
+   主日志只有 [DEBUG] Start，没有 Finished 也没有 Error。process.exit 同样卡住，只能靠外部 kill。
+   修复：glob 之后只保留普通文件（stat().isFile() 不会在 FIFO 上阻塞）。
+        挂起的网络盘没有完整解法，可以在文档里提一句。
+
+🟡 F31 每轮都把整个文件读进内存，实际只需要文件头
+   一个 214MB 的 .js：单轮耗时 346ms，RSS +321MB，每分钟重复一次。
+   修复：只读前若干 KB（如 64KB），或读到第一行正式代码为止。
+
+🟡 F32 默认 exclude 只排除了顶层 node_modules
+   'node_modules/' 只匹配 dir 根下那一层，sub/node_modules/** 照样被 glob，每分钟读一遍。
+   实测带自己 node_modules 的子项目（npm 平铺布局，装了 3 个包）：一轮 glob 到 323 个文件，
+   其中 322 个在 node_modules 里，共 4.3MB。改成 '**/node_modules' 后可以排除干净。
+   另外 .git / .vscode / .claude 本来就不会被 ** 匹配（不传 exclude 时同样被跳过），这三项是多余的；
+   __pycache__ 也只排除了顶层。
+
+🟡 F33 stop() 拦不住正在进行的这一轮
+   在 tick 读文件期间（用 FIFO 拖住 0.5s）调用 stop()，0.5s 后照样 [SPAWN] real.js。
+   正常一轮只要几毫秒，窗口很小；文件多或磁盘慢时窗口会变大。
+   修复：getJobs 之后、run 之前再检查一次 cx.jobState。
+
+🟡 F34 python 缺失时的提示永远不会出现（与 F16 同类）
+   CMD_NONE = 'none' 是真值，`if (pythonCmd)` 恒成立。从 PATH 去掉 python 后实际输出：
+   "[INFO] python available, .py files will be run by none"。
+   修复：改为判断 pythonCmd !== CMD_NONE。
+   附带：interpreter.ts 在模块顶层同步 spawnSync，最多 5 次探测（每次超时 3s）。
+        任何 import 本包的进程（包括 --list）都要先阻塞约 250–330ms，最坏约 15s。可以挪进 initialize。
+
+🟡 F35 .mjs / .cjs / .mts / .cts 加进 include 后也永远不会被调度，且没有任何日志
+   getAllowFn 对未知扩展名返回 () => false，文件头为空，一条 @cron 都读不到。
+   实测 include: ['**/*.mjs'] 时，a.mjs、a.cjs、a.mts 都是 0 个任务、0 条日志；
+   首行写了 #!/usr/bin/env node 的 b.mjs 也一样。
+   这与 README 的 "If a .ts file has a #! line … Same for any other extension" 不符。
+   修复：把这四个扩展名映射到 jstsAllow 和对应的解释器，或者在 README 的 include 说明里写清楚。
+
+🟡 F36 不带 * 前缀的 /* */ 块注释不算文件头
+   /*
+     @cron 0 9 * * *
+   */
+   第二行不以 // /* * */ 开头，被当成第一行正式代码，结果是 0 条 cron，也没有日志。
+   CLAUDE.md 和 README 只写了 /** */ 的写法，纯 /* */ 写法会静默失效。
+   修复：getJobItem 里跟踪块注释状态，或者在文档里写明块内每行必须以 * 开头。
+
+🟡 F37 说明文字里提到 @cronbegin / @cronend 时，整个文件都不调度
+   "// 每天九点备份，不需要 @cronbegin 块" 加上 "// @cron 0 9 * * *"：
+   报 [ERROR] Unclosed @cronbegin/@cronend block，连那条正常的 @cron 也不跑。
+   原因是 BEGIN_REGEX / END_REGEX 在整行任意位置匹配。
+   修复：只把注释前缀之后的第一个 token 当作块标记。
+
+🟡 F38 同一个问题每分钟重复刷日志
+   @cronbegin 块里的 " *" 空行和说明行，每行每分钟一条 [WARN]（示例文件 2 行，3 轮 6 条）；
+   段数不足、秒级表达式每分钟一条 [ERROR]。一个文件一天 1440 次。
+   另外 job.ts:77 和 extract.ts 的错误日志用绝对路径，与"主日志统一用相对路径"不一致。
+   修复：块内的空行和纯 * 行不告警；路径统一用 path.relative(cx.dir, …)。
+
+🟡 F39 有夏令时的时区：回拨那天同一钟点跑两次，前跳那天该钟点被跳过
+   America/New_York 的 2026-11-01 01:30 出现两次，30 1 * * * 在这两个 UTC 时刻都命中；
+   2026-03-08 的 30 2 * * * 全天 0 次命中。默认的 Asia/Shanghai 没有夏令时，不受影响。
+   修复：在 README 的 timezone 说明里写明。F29 的去重按 UTC 分钟算，挡不住这种情况。
+
+🟡 F40 安全：日志文件和单例锁的权限
+   (a) run.ts 用 openSync(logfile, 'a') 打开日志，会跟随符号链接。
+       实测 logDir/x.js.log → ../victim.txt，任务输出被追加进了 victim.txt。
+       若 runner 以 root 运行、logDir 对其他用户可写，就能把任务输出追加到任意文件。
+       新建的日志按 umask 是 0644，任务输出里的密钥对本机所有用户可读。
+       dir 可写本身就等于能以 runner 的身份执行任意代码，所以 dir 和 logDir 都必须只有 runner 用户可写；
+       目前代码没有检查，README 也没写。
+       修复：启动时检查 dir/logDir 的属主和 group/other 写权限并告警；
+            日志用 O_NOFOLLOW 打开、mode 0o600；README 写明权限要求。
+   (b) 锁在 Linux 抽象 namespace 里，没有权限控制，锁名可以由路径算出来。
+       实测本机任意进程先 listen 同名 socket，runner 就报 already running，起不来。
+       影响只是本地 DoS，在 README 里说明即可。
+
+🟡 F41 F18 的描述已过时，并有残留代码
+   F18 写的是"list 已从包导出，也支持 tsx src/list.ts [dir] 直接运行"，
+   但 da7f04c 删掉了导出和入口判断：tsx src/list.ts example/jobs 没有任何输出（exit 0），
+   index.ts 只导出 cronjob 和两个类型。
+   list.ts 残留未使用的 realpathSync / pathToFileURL / createContext；
+   initialize.ts 的 lock 只写不读（这是有意持有引用，可改名为 _lock）。共 4 条 oxlint warning。
+
+🟡 F42 example/main.js 用 node 跑不起来
+   它 import '../src/index.js'，而仓库里只有 index.ts：
+   node example/main.js --list 报 ERR_MODULE_NOT_FOUND，只能用 tsx 跑。
+   文件末尾注释里的 pm2 start cronjob-runner/main.js 也会因此失败（pm2 默认用 node）。
+   修复：改成 import 'cronjob-js'，或者在注释里写明用 tsx（pm2 --interpreter tsx）。
+
+── 已排查、未发现问题 ──
+   #!/usr/bin/env -S node --no-warnings 拆成 cmd + args 后能正常运行。
+   glob 遇到符号链接环不会死循环（** 不跟随目录链接）。
+   dist 的 ESM / CJS 产物在 22.13.1 和 26 上都能加载、启动、stop（22.13 上的 glob 问题见 F24）。
+   消费方在 write(tag) 里写 tag === '[ERROR]'，能通过 strict 类型检查。
+   runner 被 kill -9 后，遗留的子任务不会占住锁，新 runner 能正常启动。
+   用 tsx 启动 runner 时，子任务不会继承 tsx 的 NODE_OPTIONS。
+
+
