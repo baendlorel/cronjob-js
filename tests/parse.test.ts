@@ -26,35 +26,47 @@ const CASES: Array<[exp: string, local: string, expected: boolean]> = [
   ['30 18 * * 1-5', '2026-11-21T18:30:00+08:00', false], // 周六
 ];
 
+/** parseExp 的第三参数，这里固定一个路径即可 */
+const FILE = '/virtual/dir/x.js';
+
 describe('parseExp', () => {
   it('returns null for invalid expressions instead of throwing', () => {
-    expect(parseExp(cx, '60 9 * * *')).toBeNull();
-    expect(parseExp(cx, 'not a cron')).toBeNull();
-    expect(parseExp(cx, '   ')).toBeNull();
+    expect(parseExp(cx, '60 9 * * *', FILE)).toBeNull();
+    expect(parseExp(cx, 'not a cron', FILE)).toBeNull();
+    expect(parseExp(cx, '   ', FILE)).toBeNull();
   });
 
   it('documents that cron-parser treats "" as "* * * * *"', () => {
     // 调用方（extract）要求至少 5 段，所以不会把空串喂进来；
     // 这里固定住这个上游行为，避免以后误以为 parseExp 会挡住空串。
-    expect(parseExp(cx, '')!.stringify()).toBe('* * * * *');
+    expect(parseExp(cx, '', FILE)!.stringify()).toBe('* * * * *');
   });
 
   it('parses a valid 5-field expression', () => {
-    const exp = parseExp(cx, '0 9 * * 1-5');
+    const exp = parseExp(cx, '0 9 * * 1-5', FILE);
     expect(exp).not.toBeNull();
     expect(exp!.stringify()).toBe('0 9 * * 1-5');
+  });
+
+  it('seeds H from filepath, so the same file picks the same slot every tick', () => {
+    // runner 每分钟重新 parse 一次；不传 hashSeed 时 H 每次随机，会变成"有时一秒内跑多次、有时不跑"
+    const minuteOf = (fp: string) => parseExp(cx, 'H * * * *', fp)!.fields.minute.values;
+    const runs = Array.from({ length: 5 }, () => minuteOf('/virtual/dir/a.js'));
+    for (const r of runs) expect(r).toEqual(runs[0]);
+    // 不同文件各自取到的槽位不同（同 seed 才会相同）
+    expect(minuteOf('/virtual/dir/b.js')).not.toEqual(runs[0]);
   });
 });
 
 describe('matches', () => {
   it.each(CASES)('%s at %s → %s', (exp, local, expected) => {
-    const parsed = parseExp(cx, exp);
+    const parsed = parseExp(cx, exp, FILE);
     expect(parsed).not.toBeNull();
     expect(matches(parsed!, sh(local))).toBe(expected);
   });
 
   it('compares the second field too, so callers must truncate to the minute', () => {
-    const parsed = parseExp(cx, '0 9 * * *')!;
+    const parsed = parseExp(cx, '0 9 * * *', FILE)!;
     expect(matches(parsed, sh('2026-11-21T09:00:00+08:00'))).toBe(true);
     // 09:00:59 的“秒”不为 0，includesDate 直接判 false —— 这也是 task 里先 setSeconds(0,0) 的原因
     expect(matches(parsed, sh('2026-11-21T09:00:59+08:00'))).toBe(false);
@@ -62,7 +74,7 @@ describe('matches', () => {
 
   it('respects the context timezone', () => {
     const utc = createTestContext({ timezone: 'UTC' }).cx;
-    const parsed = parseExp(utc, '0 9 * * *')!;
+    const parsed = parseExp(utc, '0 9 * * *', FILE)!;
     expect(matches(parsed, sh('2026-11-21T09:00:00Z'))).toBe(true);
     expect(matches(parsed, sh('2026-11-21T01:00:00Z'))).toBe(false);
   });

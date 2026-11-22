@@ -8,7 +8,6 @@ import { parseExp } from '../cron/parse.js';
 import { getDefaultInterpreter } from '../interpreter.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
-import { kStringMaxLength } from 'node:buffer';
 
 /**
  * 从一行文本中提取带标记的 cron 表达式

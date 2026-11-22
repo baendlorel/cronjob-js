@@ -1,6 +1,6 @@
 cronjob-runner 问题清单
-最后更新：2026-11-21（第五轮，list 重写 + F21 修复之后）
-检查版本：main @ 79c755f，工作区干净
+最后更新：2026-11-22（第六轮审查，F23/F24 修复确认）
+检查版本：main @ c78b273 + 测试/import 修补，工作区有未提交改动
 运行环境：Node v26.13.1 / WSL2
 
 约定：
@@ -91,29 +91,26 @@ cronjob-runner 问题清单
 ✅ 附 cronjobConfig 模块级全局单例 → 已删除，配置只经 cx 传递。
 ✅ 附 全局 log 单例 → 已改为 cx.log.*，实现可经 config.write 替换。
 
+✅ F23 `H`（hash）字段每次 parse 随机取值，而 runner 每分钟都重新 parse
+   parseExp 现在传 hashSeed: filepath（list 也传同一路径）。实测同一文件连续 parse 5 次
+   都是 41、换文件变 49，6 小时逐分钟恰好每小时 1 次；list 展示的下次运行时间与调度一致。
+   tests/parse.test.ts 补了回归用例（同 seed 稳定、不同文件不同槽位）。
+   （c78b273 顺带漏改测试调用点，已补成 3 参数；extract.ts 多余的 kStringMaxLength import 已删。）
+
+✅ F24 Node 22.0–22.13 上一个任务都不跑
+   exclude 数组要 22.14.0 才支持（nodejs#56489），engines 与 README 均已改为 >=22.14.0。
+   实测 22.13.1 仍报 ERR_INVALID_ARG_TYPE（符合预期）；Node 26 一整轮 Start → SPAWN → EXIT 正常。
+   遗留风险：engines 默认只是建议，npm 不拦（pnpm 只在 engine-strict 下拦）；
+   pm2 直接跑也不会校验版本，低版本机器会一直"跑得起来但不跑任务"。未单列，需要时补运行期版本检查。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ 4cac212，工作区干净
+检查版本：main @ c78b273 + 本轮的测试/import 修补（F23、F24 已转入上方已修复区）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 162/162 均通过；下面的问题现有测试都没有覆盖。
-
-🔴✅ F23 `H`（hash）字段每次 parse 都随机取值，而 runner 每分钟都重新 parse
-   cron-parser 5 支持 H，不传 hashSeed 时每次随机：同一条 H * * * * 连续 parse 5 次，
-   minute 依次是 10 / 1 / 55 / 54 / 28。
-   模拟 6 小时逐分钟 tick，H * * * * 每小时 spawn 次数为 [1,0,2,2,1,2]（应为每小时 1 次）。
-   --list 显示的下次运行时间也和实际调度对不上。
-   修复：parseExp 传 hashSeed（如相对路径），实测同一 seed 3 次都是 4，换文件变成 55；
-        或者在 extract 里直接拒绝 H。
-
-🟠✅ F24 Node 22.0–22.13 上一个任务都不跑（F8 的 >=22.0.0 结论有误）
-   fs.globSync 的 exclude 从 22.14.0 起才接受 glob 数组（nodejs#56489），之前只接受函数。
-   用 v22.13.1 跑 dist：启动时照常打印 "Cronjob start!"，之后每分钟一条
-   [ERROR] Error while globbing scripts. ERR_INVALID_ARG_TYPE，什么都不 spawn。
-   22.14–22.16 还会往 stderr 打一次 ExperimentalWarning（22.17.0 才去掉，nodejs#58236）。
-   修复：engines 改为 >=22.14.0，README 里的 "Requires Node.js >= 22" 同步修改。
+tsc、oxlint（4 条 warning，见 F41）、vitest 163/163 均通过；下面的问题现有测试都没有覆盖。
 
 🟠 F25 单例锁的 key 直接取未规范化的 cx.dir
    同一目录换个写法就能双开：'./g'、'/tmp/cjrepro/g'、'/tmp/cjrepro/g/' 三次 initialize 都拿到了锁，
@@ -231,7 +228,8 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 162/162 均通过；下面的
    但 da7f04c 删掉了导出和入口判断：tsx src/list.ts example/jobs 没有任何输出（exit 0），
    index.ts 只导出 cronjob 和两个类型。
    list.ts 残留未使用的 realpathSync / pathToFileURL / createContext；
-   initialize.ts 的 lock 只写不读（这是有意持有引用，可改名为 _lock）。共 4 条 oxlint warning。
+   initialize.ts 的 lock 只写不读（这是有意持有引用，可改名为 _lock）。剩 4 条 oxlint warning。
+   （第六轮审查后 extract.ts 的 kStringMaxLength 已删。）
 
 🟡 F42 example/main.js 用 node 跑不起来
    它 import '../src/index.js'，而仓库里只有 index.ts：
@@ -246,5 +244,6 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 162/162 均通过；下面的
    消费方在 write(tag) 里写 tag === '[ERROR]'，能通过 strict 类型检查。
    runner 被 kill -9 后，遗留的子任务不会占住锁，新 runner 能正常启动。
    用 tsx 启动 runner 时，子任务不会继承 tsx 的 NODE_OPTIONS。
+   hashSeed 修复后，list 的 next() 与 getJobs 对同一 tick 的判断一致（实测命中 1 次）。
 
 
