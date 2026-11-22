@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { Tag } from '../src/consts.js';
+import { loadRuntime } from '../src/interpreter.js';
 import { getJobItem } from '../src/syntax/extract.js';
 import { createTestContext, logsOf } from './helpers.js';
+
+// 解释器映射现在由 cronjob() 启动时探测；纯函数测试里显式加载一次
+loadRuntime();
 
 const item = (content: string, filepath = '/virtual/dir/x.js', ctx = createTestContext()) => {
   const { cx, logs } = ctx;
@@ -86,7 +90,7 @@ describe('getJobItem — 表达式解析', () => {
   it('rejects 6-field second-level expressions', () => {
     const { item: job, logs } = item('// @cron 0 0 9 * * *');
     expect(job!.flatCronGroups).toEqual([]);
-    expect(logsOf(logs, Tag.Error)[0].args[0]).toContain('Seconds-level cron is not supported');
+    expect(logsOf(logs, Tag.Error)[0].args[0]).toContain('6 fields cron is not supported');
   });
 
   it('rejects */5 * * * * * (6 fields with a step)', () => {

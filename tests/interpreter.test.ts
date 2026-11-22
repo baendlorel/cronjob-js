@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDefaultInterpreter } from '../src/interpreter.js';
+import { getDefaultInterpreter, loadRuntime } from '../src/interpreter.js';
 
 /**
- * 解释器映射在模块加载时就探测了一次 PATH，因此不重新 mock spawnSync，
- * 只断言“当前机器上能确定的部分”，并把可选项都写进枚举。
+ * 解释器映射不再在模块加载时探测（避免 import 阻塞），所以这里显式调 loadRuntime()
+ * 模拟 cronjob() 的启动流程。不重新 mock spawnSync，只断言当前机器上能确定的部分：
  * - 机器上一定有 node（测试本身就在跑）
  * - bash/sh/python3 在不同环境不一定存在，用集合断言
  */
+loadRuntime();
+
 describe('getDefaultInterpreter', () => {
   it('.js 总是走当前 node', () => {
     expect(getDefaultInterpreter('.js')).toEqual({ cmd: process.execPath, args: [] });
