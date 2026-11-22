@@ -59,7 +59,7 @@ describe('initialize', () => {
     await initialize(createTestContext({ dir }).cx);
 
     const pending = initialize(createTestContext({ dir }).cx);
-    await expect(pending).rejects.toThrow('cronjob-runner already running');
+    await expect(pending).rejects.toThrow('cronjob-js already running');
   });
 
   it('uses different locks for different dirs', async () => {

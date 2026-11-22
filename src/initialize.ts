@@ -55,13 +55,15 @@ const acquireLock = (cx: CronjobContext) =>
     /**
      * 锁名跟着任务目录走，同一台机器跑多个项目时不会互相误伤。
      * \0 前缀 = 抽象 namespace，不落盘；进程退出（含 kill -9）由内核自动释放。
+     * exclusive: true —— cluster 模式下 listen 默认交给 primary 代绑并共享句柄，
+     * 每个 worker 都会"成功"，锁就失效了；exclusive 让每个 worker 自己真绑，第二个拿到 EADDRINUSE。
      */
     const LOCK_NAME = '\0cronjob-js-' + createHash('sha1').update(lockKeyOf(cx.dir)).digest('hex').slice(0, 8);
     const server = net.createServer();
     server.once('error', (e: NodeJS.ErrnoException) => {
       reject(e.code === 'EADDRINUSE' ? new Error('cronjob-js already running') : e);
     });
-    server.listen(LOCK_NAME, () => {
+    server.listen({ path: LOCK_NAME, exclusive: true }, () => {
       server.unref(); // 不阻止进程退出
       lock = server;
       resolve();

@@ -118,18 +118,17 @@ cronjob-runner 问题清单
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
 tsc、oxlint（4 条 warning，见 F41）、vitest 165/165 均通过；下面的问题现有测试都没有覆盖。
 
-🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 → 已修复，见上方。
-
 🟠 F26 pm2 cluster 模式下单例锁失效
    cluster worker 的 listen 由 primary 代为执行并共享句柄，两个 worker 能同时拿到同名锁。
-   用 node:cluster fork 2 个 worker 模拟（pm2 -i 基于 node:cluster，未在真实 pm2 -i 上跑）：
-   两个 worker 都 ACQUIRED，所有任务会被跑 N 次。
-   推荐修法：server.listen({ path: LOCK_NAME, exclusive: true })。
-     实测第二个 worker 得到 EADDRINUSE，initialize 照旧 reject，错误分支不用改。
-     只改一行，不影响 fork 模式的现有行为，也与 F25 的 realpath 规范化不冲突。
-     还差一步：在真实 pm2 -i 2 上复验一次。
-   补充：runner 是单实例守护进程，常规部署只该用 fork 模式；exclusive 只是兜底，
-     避免误用 -i 时同一任务成倍执行。
+   node:cluster fork 2 个 worker 模拟：两个 worker 都 ACQUIRED，所有任务会被跑 N 次。
+   修法：server.listen({ path: LOCK_NAME, exclusive: true })。
+     node:cluster 模拟：第二个 worker 得到 EADDRINUSE，initialize 照旧 reject。
+     真实 pm2 7.1.2 `-i 2`（cluster_mode）：2 个 worker 中只有 1 个 "Cronjob start!"，
+       另一个 cronjob() reject "cronjob-js already running"。
+     只改一行，fork 模式的现有行为不变。
+   注意：cluster 模式下锁保住了"只跑一份"，但被拒绝的 worker 退出后 pm2 会反复重启
+     （实测日志里连续多次 rejected）。部署脚本应在 cronjob() reject 时打印原因并正常退出，
+     更要紧的是：runner 就该用 fork 模式跑，`-i` 是误用；exclusive 只是兜底。
    备选（不推荐）：改用 flock / 文件锁 —— 要自己处理过期锁和清理，
      与现在"进程退出由内核自动释放"的语义冲突，复杂度更高。
 

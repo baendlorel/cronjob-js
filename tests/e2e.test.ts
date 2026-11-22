@@ -197,7 +197,7 @@ describe('cronjob — 端到端', () => {
     const dir = tempDir();
     const task = await cronjob({ dir, write: () => {} });
 
-    await expect(cronjob({ dir, write: () => {} })).rejects.toThrow('cronjob-runner already running');
+    await expect(cronjob({ dir, write: () => {} })).rejects.toThrow('cronjob-js already running');
 
     task.stop();
     vi.useRealTimers();

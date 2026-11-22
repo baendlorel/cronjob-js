@@ -202,7 +202,7 @@ await cronjob({
 
 ### `cronjob(config?): Promise<TaskController>`
 
-Starts the minute-based scheduler. Immediately takes a single-instance lock keyed by a hash of `dir` — a second runner on the same directory throws `cronjob-runner already running`. The lock is an abstract Unix socket, so the OS releases it when the process dies, including `SIGKILL`.
+Starts the minute-based scheduler. Immediately takes a single-instance lock keyed by a hash of `dir` — a second runner on the same directory throws `cronjob-js already running`. The lock is an abstract Unix socket, so the OS releases it when the process dies, including `SIGKILL`.
 
 If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule table and calls `process.exit(0)` instead of starting the scheduler. No lock is taken in that branch.
 
