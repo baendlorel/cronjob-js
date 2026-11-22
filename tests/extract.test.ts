@@ -149,6 +149,19 @@ describe('getJobItem — @cronutc', () => {
   it('tolerates trailing words after the expression', () => {
     expect(tzsOf('// @cronutc 0 9 * * * 每天 UTC 九点')).toEqual(['UTC']);
   });
+
+  it('decides the timezone once and refuses lines with both markers (F45 / F46)', () => {
+    // 两个标记同行时不再做第二次搜索、也不猜：整行拒绝并记 Error，
+    // 因此 --list 拿到的时区与调度用的必然是同一个。
+    const { item: job, logs } = item('// @cron 0 9 * * * 也可以写成 @cronutc');
+    expect(job!.flatCronGroups).toEqual([]);
+    expect(logsOf(logs, Tag.Error)).toHaveLength(1);
+    expect(logsOf(logs, Tag.Error)[0].args[0]).toContain('Line contains both @cron and @cronutc');
+
+    const reverse = item('// 说明 @cron 之后再 @cronutc 0 9 * * *');
+    expect(reverse.item!.flatCronGroups).toEqual([]);
+    expect(logsOf(reverse.logs, Tag.Error)).toHaveLength(1);
+  });
 });
 
 describe('getJobItem — 分组', () => {

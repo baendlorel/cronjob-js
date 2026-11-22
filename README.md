@@ -91,6 +91,8 @@ The cron expression goes in the **header comment** — from line 1 until the fir
 
 Everything after the 5 fields is still a note, and `@cronutc` works inside `@cronbegin` / `@cronend` blocks like any other line. `--list` marks those rows with a `UTC` prefix.
 
+Both markers are found anywhere in the line, notes included, so a header line must not contain `@cronutc` unless it is that line's marker. Putting both markers on one line (`// @cron 0 9 * * * 也可以写成 @cronutc`) is ambiguous — the line is rejected with an `[ERROR]` and not scheduled. Keep `@cronutc` out of the note.
+
 For `.py` the header may use `#` comments. A `@cron` must sit on one of the `#` lines; the `'''` / `"""` docstring delimiters are accepted in the header but **docstring body lines are not scanned**, so `@cron` inside a multi-line docstring is ignored. Use `# @cron …` for Python jobs.
 
 ```js
@@ -223,7 +225,7 @@ If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule tab
 
 ### Permissions
 
-On startup `cronjob()` checks that `dir` and `logDir` are owned by the current user and are **not group- or world-writable**, and throws rather than starting if not. Both directories are equivalent to code execution as the runner's user — anyone who can write `dir` can drop a script, and anyone who can write `logDir` can append to job logs. `/tmp`-style shared directories are rejected by design. Custom log files are created with mode `0640`; existing files are appended to without changing their mode. The check is skipped when running as root (root can write anywhere, so it proves nothing) and on platforms without `process.getuid` (Windows).
+On startup `cronjob()` checks that `dir` and `logDir` are owned by the current user and are **not group- or world-writable**, and throws rather than starting if not. Directories it creates itself are made with mode `0755` regardless of umask, so they pass that check on `umask 002` machines (Debian/Ubuntu with `USERGROUPS_ENAB`) as well as `022` ones. Both directories are equivalent to code execution as the runner's user — anyone who can write `dir` can drop a script, and anyone who can write `logDir` can append to job logs. `/tmp`-style shared directories are rejected by design. Custom log files are created with mode `0640`; existing files are appended to without changing their mode. The check is skipped when running as root (root can write anywhere, so it proves nothing) and on platforms without `process.getuid` (Windows).
 
 The lock name is derived from `dir`, so it is predictable; any local process that binds that abstract socket first will make the runner report `cronjob-js already running`. That is a local denial of service at worst — it cannot be used to make the runner execute anything.
 

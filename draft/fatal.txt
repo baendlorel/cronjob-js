@@ -245,6 +245,34 @@ cronjob-runner 问题清单
    附带：--list 分支在 initialize 之前就 exit，因此 --list 不会再做运行时探测；
    它展示的命令按 node 执行时并不需要 tsx/python，不影响输出正确性。
 
+🟠✅ F44 umask 为 002 的机器上，runner 启动即失败（F40 的回归）
+   ensureDir 按当前 umask 建目录，checkDirPermissions 紧接着拒绝 group 可写的目录。
+   Debian/Ubuntu 开了 USERGROUPS_ENAB 时，普通用户登录 shell 的 umask 就是 002；
+   pm2 daemon 会把启动它时的 umask 传给应用（实测在 umask 002 下启动 pm2，应用 umask=2）。
+   结果是 dir 被建成 775 后立刻被自己拒绝，这类机器上第一次部署就起不来；umask 022 下正常。
+   修复：ensureDir 统一 mkdirSync(dir, { recursive: true, mode: 0o755 })；0755 不带 group/other 写位，
+   任何 umask 下只会更收紧，检查与建目录不再互相打架。
+   实测：umask 002 + 尚不存在的 dir → 不再报错，dir/logDir mode 均为 755。
+   回归用例 tests/initialize.test.ts「creates new dirs with 0755 even under umask 002 (F44)」
+   （进程内 set umask 002，结束后恢复）。
+
+🟠✅ F45 说明文字里提到 @cronutc 时，调度和 --list 用的时区不一致
+   extractCron 优先认 @cron，按 cx.timezone 解析；getJobItem 却只要整行包含 @cronutc
+   就把 timezone 标成 'UTC'。这个标签会被 --list 拿去重新 parse，所以展示和实际调度对不上。
+   实测（timezone=Asia/Shanghai）："// @cron 0 9 * * * 也可以写成 @cronutc"
+     调度：上海 09:00 命中、UTC 09:00 不命中；--list：显示 "UTC 0 9 * * *"，下次运行 17:00。
+   修复：时区只由 extractCron 决定一次，它返回 { cron, timezone }，getJobItem 删掉第二次 UTC_REGEX 搜索，
+   直接 list.push({ ...extracted, group })；时区只有一个来源，调度与 --list 必然一致。
+   实测：'@cron' 与 '@cronutc 0 9 * * *' 混排时各自按自己的时区命中，--list 显示 UTC 与调度一致。
+
+🟡✅ F46 同一行既有 @cron 又有 @cronutc 时，这一行被静默丢弃（随 F45 一并修复）
+   extractCron 优先取 @cron，从它后面切 token；@cronutc 本身就变成第一个 token，5 段解析失败返回 null。
+   tokens 有 5 段以上，不进"段数不足"的 Error 分支，所以 0 条表达式、0 条日志。
+   修复：两个标记同行时记 Error「Line contains both @cron and @cronutc, nothing scheduled: <相对路径>」
+   并整行不调度（与 F37「拒绝并记 Error」一致，且不 throw，单个坏文件不影响本轮其它文件）。
+   实测：两种语序都是 0 条表达式 + 1 条 [ERROR]，不会再一边跑一边展示成 UTC。
+   回归用例 tests/extract.test.ts「decides the timezone once and refuses lines with both markers (F45 / F46)」。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
@@ -270,32 +298,7 @@ tsc、oxlint（0 条 warning）、vitest 176/176 均通过。
 运行环境：Node v26.13.1 / pm2 7.1.2 / WSL2（/etc/login.defs：UMASK 022，USERGROUPS_ENAB yes）
 pnpm check、oxlint（0 warning）、vitest 176/176 均通过；下面的问题这些检查都没有覆盖。
 
-🟠 F44 umask 为 002 的机器上，runner 启动即失败（F40 的回归）
-   ensureDir 按当前 umask 建目录，checkDirPermissions 紧接着拒绝 group 可写的目录。
-   Debian/Ubuntu 开了 USERGROUPS_ENAB 时，普通用户登录 shell 的 umask 就是 002；
-   pm2 daemon 会把启动它时的 umask 传给应用（实测在 umask 002 下启动 pm2，应用 umask=2）。
-   实测：umask 002 下 cronjob({ dir: 尚不存在的目录 }) →
-     "dir must be owned by the current user and not group/world-writable: … (mode=775)"。
-   结果是 runner 拒绝自己刚建的目录，在这类机器上第一次部署就起不来；umask 022 下正常。
-   修法候选：mkdirSync(dir, { recursive: true, mode: 0o755 })；或者检查只拒绝 other 可写（mode & 0o002），
-   group 可写只告警（私有用户组下组里只有自己）。
-
-🟠 F45 说明文字里提到 @cronutc 时，调度和 --list 用的时区不一致
-   extractCron 优先认 @cron，按 cx.timezone 解析；getJobItem 却只要整行包含 @cronutc
-   就把 timezone 标成 'UTC'。这个标签会被 --list 拿去重新 parse，所以展示和实际调度对不上。
-   实测（timezone=Asia/Shanghai）："// @cron 0 9 * * * 也可以写成 @cronutc"
-     调度：上海 09:00 命中、UTC 09:00 不命中（按上海时间跑）；
-     --list：显示 "UTC 0 9 * * *"，下次运行 17:00（按 UTC 算）。
-   修法：时区只由 extractCron 决定一次，getJobItem 直接用它的结果（比如返回 { cron, timezone }），
-        不要再对整行做第二次 UTC_REGEX 搜索。
-
-🟡 F46 同一行既有 @cron 又有 @cronutc 时，这一行被静默丢弃
-   extractCron 优先取 @cron，从它后面切 token；@cronutc 本身就变成了第一个 token，5 段解析失败返回 null。
-   tokens 有 5 段以上，不会进"段数不足"的 Error 分支，所以没有任何日志。
-   实测："// @cronutc 0 9 * * * 参见 @cron 语法" → 0 条表达式、0 条日志；
-        "// 说明 @cron 之后再 @cronutc 0 9 * * *" → 同样 0 条、0 条日志。
-   这和 F37 的原则不同：F37 是"拒绝并记 Error"，这里是"静默不调度"。
-   修法：取两个标记里在行内更靠前的那个；或者两个都出现时直接记 Error。
+🟠✅ F44 / 🟠✅ F45 / 🟡✅ F46 → 已修复，见上方。
 
 🟡 F47 --list 显示的解释器是 none，与实际运行不符（F43 的回归）
    --list 分支在 loadRuntime() 之前就 exit，getDefaultInterpreter 读到的是 fallback 映射，

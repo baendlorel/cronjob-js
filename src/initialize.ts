@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import net from 'node:net';
 
 import { CMD_NONE, type Runtime } from './interpreter.js';
+import { DIR_MODE } from './consts.js';
 
 /** 持有引用，防止 unref 后的 server 被 GC，导致锁被提前释放 */
 let _lock: net.Server | null = null;
@@ -27,9 +28,9 @@ const orPython = (cx: CronjobContext, runtime: Runtime) => {
 };
 
 const ensureDir = (cx: CronjobContext) => {
-  mkdirSync(cx.dir, { recursive: true });
+  mkdirSync(cx.dir, { recursive: true, mode: DIR_MODE });
   if (cx.dir !== cx.logDir) {
-    mkdirSync(cx.logDir, { recursive: true });
+    mkdirSync(cx.logDir, { recursive: true, mode: DIR_MODE });
   }
 };
 

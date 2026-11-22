@@ -32,6 +32,24 @@ describe('initialize', () => {
     await expect(initialize(cx, runtime)).resolves.toBeUndefined();
   });
 
+  it('creates new dirs with 0755 even under umask 002 (F44)', async () => {
+    if (process.getuid?.() === 0) return; // root 不检查权限
+    const root = tempDir();
+    const dir = path.join(root, 'jobs');
+    const logDir = path.join(root, 'logs');
+
+    // Debian/Ubuntu 的 USERGROUPS_ENAB 下登录 shell 默认就是 002，pm2 会把它传给应用
+    const oldUmask = process.umask(0o002);
+    try {
+      await initialize(createTestContext({ dir, logDir }).cx, runtime);
+    } finally {
+      process.umask(oldUmask);
+    }
+
+    expect(statSync(dir).mode & 0o777).toBe(0o755);
+    expect(statSync(logDir).mode & 0o777).toBe(0o755);
+  });
+
   it('does not create logDir twice when it equals dir', async () => {
     const dir = tempDir();
     writeFileSync(path.join(dir, 'keep.txt'), 'x');

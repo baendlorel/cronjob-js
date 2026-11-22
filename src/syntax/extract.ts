@@ -10,6 +10,15 @@ import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
 
 /**
+ * 一行解析出来的调度：表达式 + 它实际使用的时区。
+ * 时区只在这里决定一次，调用方不要再对整行做第二次标记搜索（F45）。
+ */
+export interface ExtractedCron {
+  cron: CronExpression;
+  timezone: string;
+}
+
+/**
  * 从一行文本中提取带标记的 cron 表达式
  * - 只接受5位表达式，不支持秒级
  * - `@cronutc <5 段>` 是行内指令：这一条按 UTC 解析，不影响其它行
@@ -23,7 +32,7 @@ export function extractCron(
   trimmedLine: string,
   inBlock: boolean,
   relativePath: string,
-): CronExpression | CronBlockMaker | null {
+): ExtractedCron | CronBlockMaker | null {
   if (trimmedLine.search(Marker.BEGIN_REGEX) !== -1) {
     return Marker.BEGIN;
   }
@@ -36,12 +45,17 @@ export function extractCron(
   // @cronutc的index
   const utcIndex = trimmedLine.search(Marker.UTC_REGEX);
 
+  // 同一行两个标记无法判断该按哪个时区跑；宁可拒绝并记 Error，也不猜
+  if (index !== -1 && utcIndex !== -1) {
+    cx.log.err(`Line contains both ${Marker.CRON} and ${Marker.UTC}, nothing scheduled: ${relativePath}`);
+    return null;
+  }
+
   let timezone = cx.timezone;
   let expStart = -1;
 
   // 一般都是这个，所以这个排前面，分支预测更好
   if (index !== -1) {
-    timezone = cx.timezone;
     expStart = index + Marker.CRON.length;
   } else if (utcIndex !== -1) {
     timezone = 'UTC';
@@ -74,7 +88,8 @@ export function extractCron(
   }
 
   // 取前 5 段，之后是说明文字
-  return parseExp(cx, tokens.slice(0, 5).join(' '), relativePath, timezone);
+  const cron = parseExp(cx, tokens.slice(0, 5).join(' '), relativePath, timezone);
+  return cron ? { cron, timezone } : null;
 }
 
 /**
@@ -122,15 +137,13 @@ export function getJobItem(cx: CronjobContext, filepath: string, content: string
   let inCronBlock = false;
   let group = 0;
   for (const line of lines) {
-    // @cronutc 与 @cron 同一行，按行判断时区，不维护跨行状态
-    const timezone = line.search(Marker.UTC_REGEX) !== -1 ? 'UTC' : cx.timezone;
-    const cron = extractCron(cx, line, inCronBlock, relativePath);
+    const extracted = extractCron(cx, line, inCronBlock, relativePath);
     // 忽略空的
-    if (!cron) {
+    if (!extracted) {
       continue;
     }
 
-    if (cron === Marker.BEGIN) {
+    if (extracted === Marker.BEGIN) {
       // 已经在快中，再次碰到begin，则语法错误不予解析
       if (inCronBlock) {
         cx.log.err(`Nested ${Marker.BEGIN} found in file: ${relativePath}`);
@@ -141,7 +154,7 @@ export function getJobItem(cx: CronjobContext, filepath: string, content: string
       continue;
     }
 
-    if (cron === Marker.END) {
+    if (extracted === Marker.END) {
       // 并不在块中，却直接碰到end，语法错误不予解析
       if (!inCronBlock) {
         cx.log.err(`${Marker.END} didn't match ${Marker.BEGIN} in file: ${relativePath}`);
@@ -151,7 +164,8 @@ export function getJobItem(cx: CronjobContext, filepath: string, content: string
       continue;
     }
 
-    list.push({ cron, group: inCronBlock ? group : 0, timezone });
+    // 时区跟着解析结果走：@cron 与 @cronutc 同时出现时标记不匹配的错误已在 extractCron 里拦下
+    list.push({ ...extracted, group: inCronBlock ? group : 0 });
   }
 
   // 语法错误不予解析
