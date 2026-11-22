@@ -25,9 +25,8 @@ export interface UserCronjobConfig {
 
   /**
    * Glob expressions to exclude cronjob scripts.
-   * - Will be passed to fs.glob with the `ignore` option.
-   *
-   * default value is `['node_modules/','.git','.vscode','.claude','__pycache__']`
+   * - Will be passed to fs.glob as `exclude`
+   * - 默认值会去掉node_modules、.git、.vscode、.claude、__pycache__
    */
   exclude: string[];
 
@@ -100,7 +99,15 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     logDir = dir,
     jobcwd = dir,
     include = ['**/*.{ts,js,sh}'],
-    exclude = ['node_modules/', '.git', '.vscode', '.claude', '__pycache__'],
+    exclude = [
+      '**/node_modules/',
+      '**/.git/',
+      '**/.vscode/',
+      '**/.claude/',
+      '**/__pycache__/',
+      '**/dist/',
+      '**/coverage/',
+    ],
     timezone = 'Asia/Shanghai',
     write = (tag: Tag, ...args: any[]) => console.log(formatter.format(new Date()), tag, ...args),
   } = Object(rawConfig) as UserCronjobConfig;

@@ -30,12 +30,12 @@ export async function list(cx: CronjobContext) {
   for (const f of files) {
     const relativePath = path.relative(cx.dir, f.filepath);
 
-    if (!f.content) {
-      // loadFiles 已经为非常规文件打过 WARN，这里只报读取失败
-      if (f.error instanceof Error && f.error.message === 'not a regular file') {
-        continue;
-      }
+    if (f.error) {
       cx.log.err(`Error loading file ${relativePath}: ${f.error}`);
+      continue;
+    }
+    if (f.content === null) {
+      // 非普通文件：readHeader 已经记过 WARN
       continue;
     }
 

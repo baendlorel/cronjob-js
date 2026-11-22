@@ -11,7 +11,16 @@ describe('createContext — 默认值', () => {
       dir: '/virtual/dir',
       logDir: '/virtual/dir',
       include: ['**/*.{ts,js,sh}'],
-      exclude: ['node_modules/', '.git', '.vscode', '.claude', '__pycache__'],
+      exclude: [
+        '**/node_modules/',
+        '**/.git/',
+        '**/.vscode/',
+        '**/.claude/',
+        '**/__pycache__/',
+        '**/dist/',
+        '**/dist-tsc/',
+        '**/coverage/',
+      ],
       timezone: 'Asia/Shanghai',
     });
     expect(cx.jobcwd('/virtual/dir/a.js')).toBe('/virtual/dir');

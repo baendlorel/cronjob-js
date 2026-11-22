@@ -11,7 +11,8 @@ import { readHeader } from './header.js';
 export type FileContent =
   | {
       filepath: string;
-      content: string;
+      /** null = 已跳过（非普通文件），readHeader 已经记过 WARN，不算读取失败 */
+      content: string | null;
       error: null;
     }
   | {
@@ -31,7 +32,6 @@ export async function loadFiles(cx: CronjobContext, filepaths: string[]): Promis
   const result: Array<FileContent> = [];
   for (let i = 0; i < filepaths.length; i += CHUNK_SIZE) {
     const promises = filepaths.slice(i, i + CHUNK_SIZE).map(async (filepath): Promise<FileContent> => {
-      const relativePath = path.relative(cx.dir, filepath);
       try {
         const allower = getAllowFn(path.extname(filepath));
         const content = await readHeader(cx, filepath, allower);
@@ -87,8 +87,12 @@ export function getJobs(cx: CronjobContext, files: FileContent[], now: Date): Jo
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (!f.content) {
+    if (f.error) {
       cx.log.err(`Error loading file ${path.relative(cx.dir, f.filepath)}: ${f.error}`);
+      continue;
+    }
+    if (f.content === null) {
+      // 非普通文件：readHeader 已经记过 WARN，这里不再刷 Error
       continue;
     }
 

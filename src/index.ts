@@ -6,6 +6,7 @@
 import { performance } from 'node:perf_hooks';
 
 import { type UserCronjobConfig, createContext } from './config.js';
+import { CronjobState } from './consts.js';
 import { tryGlobSync } from './utils.js';
 import { runTask, type TaskController } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
@@ -50,9 +51,16 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
     const files = await loadFiles(cx, filepaths);
     const jobs = await getJobs(cx, files, now);
 
+    // 读文件期间可能被 stop() / pause()（F33）：已不在 Running 就不再 spawn 这一轮
+    if (cx.jobState === CronjobState.Stopped) {
+      return;
+    }
+
     for (let i = 0; i < jobs.length; i++) {
       for (let n = 0; n < jobs[i].count; n++) {
-        run(cx, jobs[i]);
+        if (cx.jobState === CronjobState.Running) {
+          run(cx, jobs[i]);
+        }
       }
     }
 

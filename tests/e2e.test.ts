@@ -65,9 +65,9 @@ describe('cronjob — 端到端', () => {
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     const jobLog = path.join(dir, 'hello.sh.log');
     await waitFor(() => existsSync(jobLog) && readFileSync(jobLog, 'utf8').includes('hit'));
@@ -90,9 +90,9 @@ describe('cronjob — 端到端', () => {
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     expect(logsOf(logs).join('\n')).not.toContain('[SPAWN]');
   });
@@ -105,9 +105,9 @@ describe('cronjob — 端到端', () => {
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     await waitFor(() => readFileSyncIfExists(path.join(dir, 'twice.sh.log')).split('\n').filter(Boolean).length >= 2);
     // 两个 [SPAWN] 是同步打的，日志先于子进程退出，必定已经到达
@@ -126,9 +126,9 @@ describe('cronjob — 端到端', () => {
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     await waitFor(() => readFileSyncIfExists(path.join(dir, 'once.sh.log')).includes('once'));
     expect(logs.filter((l) => l.tag === Tag.Spawn)).toHaveLength(1);
@@ -140,9 +140,9 @@ describe('cronjob — 端到端', () => {
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     const text = logsOf(logs).join('\n');
     expect(text).toContain('[INFO] No scripts found.');
@@ -161,9 +161,9 @@ describe('cronjob — 端到端', () => {
     });
 
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     // .rb 没有 allowFn，整段头部都被视为正式代码，于是提取不到表达式
     expect(logs.filter((l) => l.tag === Tag.Spawn)).toEqual([]);
@@ -182,9 +182,9 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     await settleIo();
     await tickAndSettle();
-    task.stop();
-    vi.useRealTimers();
+    // F33 之后：stop 之后再落地的 I/O 不再 spawn，所以先让本轮的 I/O 跑完再 stop
     await settleIo();
+    task.stop();
 
     const errors = logs.filter((l) => l.tag === Tag.Error);
     expect(errors.length).toBeGreaterThanOrEqual(1);
@@ -205,9 +205,8 @@ describe('cronjob — 端到端', () => {
 
     task.resume();
     await tickAndSettle();
-    // 恢复后的这一轮里有真实 I/O：在真实定时器下等它落地，再 stop / 断言
-    vi.useRealTimers();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // 恢复后的这一轮里有真实 I/O：先等它落地再 stop（F33 之后 stop 会拦住未开始的 spawn）
+    await settleIo();
     task.stop();
 
     await waitFor(() => readFileSyncIfExists(path.join(dir, 'p.sh.log')).includes('p'));
@@ -222,6 +221,29 @@ describe('cronjob — 端到端', () => {
 
     task.stop();
     vi.useRealTimers();
+  });
+
+  it('读取文件期间 stop()，这一轮不再 spawn（F33）', async () => {
+    const dir = tempDir();
+    writeJob(dir, 'slow.sh', '#!/bin/bash\n# @cron * * * * *\necho slow\n');
+
+    const logs: Array<{ tag: string; args: any[] }> = [];
+    const task = await cronjob({
+      dir,
+      write: (tag, ...args) => {
+        logs.push({ tag, args });
+        // [DEBUG] Start 就是 tick 已经进入 loadFiles 的时刻
+        if (tag === Tag.Debug && String(args[0]) === 'Start') task.stop();
+      },
+    });
+
+    await tickAndSettle();
+    await settleIo();
+    await tickAndSettle();
+    await settleIo();
+
+    expect(logs.filter((l) => l.tag === Tag.Spawn)).toEqual([]);
+    expect(existsSync(path.join(dir, 'slow.sh.log'))).toBe(false);
   });
 });
 

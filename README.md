@@ -215,12 +215,31 @@ If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule tab
 | `dir`      | `string`                                   | `process.cwd()`                                                  | Directory scanned for job scripts. Created if missing.                                                                                                            |
 | `logDir`   | `string`                                   | same as `dir`                                                    | Where per-job logs are written. Created if missing.                                                                                                               |
 | `include`  | `string[]`                                 | `['**/*.{ts,js,sh}']`                                            | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python.                                                                           |
-| `exclude`  | `string[]`                                 | `['node_modules/', '.git', '.vscode', '.claude', '__pycache__']` | Glob patterns to skip (passed to `fs.glob`'s `exclude`).                                                                                                          |
+| `exclude`  | `string[]`                                 | see below                                                        | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
 | `timezone` | `string`                                   | `'Asia/Shanghai'`                                                | IANA timezone used for cron matching and for the `timeFormat` timestamps.                                                                                         |
 | `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                                                    | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
 | `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)`                                | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
 
 Invalid config throws a `TypeError` naming the option (`dir`, `logDir`, `include`, …); an unknown `timezone` throws a `RangeError` from `Intl.DateTimeFormat`.
+
+#### Default `exclude`
+
+```js
+[
+  '**/node_modules/',
+  '**/.git/',
+  '**/.vscode/',
+  '**/.claude/',
+  '**/__pycache__/',
+  '**/dist/',
+  '**/dist-tsc/',
+  '**/coverage/',
+];
+```
+
+`**/` matters: a plain `'node_modules/'` only matches the directory at the root of `dir`, so a vendored sub-project under `jobs/node_modules/` would still be scanned and read every minute. Dot-directories (`.git`, `.vscode`, `.claude`) are skipped by `fs.glob` anyway; they are listed so that an explicit `exclude` override cannot accidentally re-include them. `dist`, `dist-tsc` and `coverage` are common build outputs that would otherwise be globbed and read as job scripts.
+
+If you replace `exclude`, you replace this whole list — there is no merging.
 
 ### `TaskController`
 

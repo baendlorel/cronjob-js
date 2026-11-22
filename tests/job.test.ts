@@ -2,6 +2,7 @@ import type { CronGroupItem } from '../src/types/job.js';
 
 import { describe, expect, it } from 'vitest';
 
+import { Tag } from '../src/consts.js';
 import { parseExp } from '../src/cron/parse.js';
 import { getMatchedJob, getJobs, loadFiles } from '../src/syntax/job.js';
 import { MAX_HEADER } from '../src/syntax/header.js';
@@ -170,6 +171,11 @@ describe('loadFiles', () => {
     const result = await loadFiles(local, [fifo, okPath]);
     expect(result.map((r) => r.content)).toEqual([null, '// @cron * * * * *\n']);
     expect(logs.some((l) => String(l.args[0]).includes('Skipped non-regular file: pipe.js'))).toBe(true);
+
+    // 跳过 ≠ 读取失败：getJobs 不应再为它记一条 Error
+    logs.length = 0;
+    getJobs(local, [result[0]], SAT_9);
+    expect(logs.filter((l) => l.tag === Tag.Error)).toEqual([]);
   });
 
   it('超过 MAX_HEADER 的大文件只读前 64KB（F31）', async () => {
