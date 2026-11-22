@@ -15,12 +15,15 @@ export const enum CronjobState {
 
 export namespace Marker {
   export const CRON = '@cron' as const;
-  export const CRON_REGEX = /@cron\b/;
+  export const REGEX = /@cron\b/;
+  export const REGEX_START = /^@cron\b/;
 
   export const BEGIN = '@cronbegin' as const;
   export const BEGIN_REGEX = /@cronbegin\b/;
+  export const BEGIN_REGEX_START = /^@cronbegin\b/;
   export const END = '@cronend' as const;
   export const END_REGEX = /@cronend\b/;
+  export const END_REGEX_START = /^@cronend\b/;
 }
 
 export type CronBlockMaker = typeof Marker.BEGIN | typeof Marker.END;

@@ -31,7 +31,7 @@ export function extractCron(
   }
 
   // 可以确保到此为止的都是注释，且trim过
-  const markerIndex = trimmedLine.search(Marker.CRON_REGEX);
+  const markerIndex = trimmedLine.search(Marker.REGEX);
   if (markerIndex === -1) {
     if (inBlock) {
       //! 因为js多行注释会导致"*"开头的行被误认为cron表达式的一部分

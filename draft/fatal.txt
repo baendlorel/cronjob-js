@@ -197,13 +197,14 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 171/171 均通过；下面的
    第二行不以 // /* * */ 开头，被当成第一行正式代码，结果是 0 条 cron，也没有日志。
    CLAUDE.md 和 README 只写了 /** */ 的写法，纯 /* */ 写法会静默失效。
    修复：getJobItem 里跟踪块注释状态，或者在文档里写明块内每行必须以 * 开头。
-TODO: 这里改为不允许出现除了@cron以外其他的字符串。
+——我已修改jstsAllow
 
 🟡 F37 说明文字里提到 @cronbegin / @cronend 时，整个文件都不调度
    "// 每天九点备份，不需要 @cronbegin 块" 加上 "// @cron 0 9 * * *"：
    报 [ERROR] Unclosed @cronbegin/@cronend block，连那条正常的 @cron 也不跑。
    原因是 BEGIN_REGEX / END_REGEX 在整行任意位置匹配。
    修复：只把注释前缀之后的第一个 token 当作块标记。
+——但我认为严格一点好，宁可不运行也不能以外地运行
 
 🟡 F38 同一个问题每分钟重复刷日志
    @cronbegin 块里的 " *" 空行和说明行，每行每分钟一条 [WARN]（示例文件 2 行，3 轮 6 条）；
