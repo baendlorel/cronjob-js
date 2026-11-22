@@ -1,5 +1,6 @@
-import { Marker } from '../consts.js';
-
+/**
+ * ! 多行注释以`*`开头是实时标准和社区、行业规范
+ */
 const jstsAllow = (line) =>
   // 单行注释
   line.startsWith('//') ||
@@ -9,16 +10,6 @@ const jstsAllow = (line) =>
   line.startsWith('*') ||
   // 多行注释的最后一行
   line.startsWith('*/') ||
-  // 允许多行注释中直接出现@cron
-  //! 这不是百分百准确，但绝大多数时候，此条是有效的，原因如下：
-  //! @cron开头的只可能是字符串中或装饰器或多行注释。
-  //! 字符串会被其他规则排除
-  //! 装饰器@cron或者@cron(...)，一般不会解析出cron表达式，需要精心构造特例才能实现
-  //! 这种情况确实对多行注释不友好，不便在多行注释中以其他文字开头，但基本不会有问题
-  //! 这里不会做字符walking解析注释块，否则开销过大
-  Marker.REGEX_START.test(line) ||
-  Marker.BEGIN_REGEX_START.test(line) ||
-  Marker.END_REGEX_START.test(line) ||
   // 什么都没有，也可能是多行注释
   line.length === 0;
 

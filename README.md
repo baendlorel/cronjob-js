@@ -78,7 +78,9 @@ Files with no `@cron` line are reported with `[WARN] No cron expression: <path>`
 
 ## Writing jobs
 
-The cron expression goes in the **header comment** — from line 1 until the first line of real code. For `.ts`/`.js` use `//` or `/** */`, for `.sh` use `#`. Blank lines and other comment lines inside that header are fine; they do not end it.
+The cron expression goes in the **header comment** — from line 1 until the first line of real code. For `.ts`/`.js` use `//` or `/** */`, for `.sh` use `#`. Blank lines and other comment lines inside that header are fine; they do not end it. In a `/* */` block every body line must start with `*` — that is the conventional style (and what most editors and formatters produce). A `/*` block whose body has no `*` prefix is **not** a header: the first such line ends it, so no `@cron` is seen and the file is silently not scheduled.
+
+`@cronbegin` / `@cronend` are matched **anywhere in a header line**, including prose. A comment that merely mentions them (`` // see @cronend ``) is treated as the marker, so the file is rejected with a block error rather than scheduled. This is deliberate: a file that fails to parse never runs, which is safer than guessing what the author meant. Keep those words out of notes inside a header.
 
 For `.py` the header may use `#` comments. A `@cron` must sit on one of the `#` lines; the `'''` / `"""` docstring delimiters are accepted in the header but **docstring body lines are not scanned**, so `@cron` inside a multi-line docstring is ignored. Use `# @cron …` for Python jobs.
 

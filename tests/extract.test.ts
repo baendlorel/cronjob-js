@@ -220,6 +220,16 @@ describe('getJobItem — 语法错误', () => {
     expect(job!.flatCronGroups).toHaveLength(1);
     expect(logsOf(logs, Tag.Warn)).toHaveLength(1);
     expect(logsOf(logs, Tag.Warn)[0].args[0]).toContain('@cron should be used to mark cron expressions');
+    // F38：日志用相对路径，避免每个 tick 都刷绝对路径
+    expect(String(logsOf(logs, Tag.Warn)[0].args[0])).not.toContain('/virtual/dir/');
+  });
+
+  it('does not warn on blank lines or bare asterisks inside a block (F38)', () => {
+    const { item: job, logs } = item(
+      ['/**', ' * @cronbegin', ' *', ' * @cron 0 9 * * *', ' *', ' * @cronend', ' */'].join('\n'),
+    );
+    expect(job!.flatCronGroups).toHaveLength(1);
+    expect(logsOf(logs, Tag.Warn)).toHaveLength(0);
   });
 });
 
