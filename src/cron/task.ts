@@ -24,7 +24,8 @@ const nextMinuteBoundary = (from: Date) => {
  */
 export function runTask(cx: CronjobContext, fn: (now: Date) => void | Promise<void>): TaskController {
   const schedule = () => {
-    if (cx.jobState !== CronjobState.Running) {
+    // 只有 Stopped 才停链；Paused 也要继续排，否则进程会在下一个边界自行退出
+    if (cx.jobState === CronjobState.Stopped) {
       return;
     }
 
@@ -35,8 +36,14 @@ export function runTask(cx: CronjobContext, fn: (now: Date) => void | Promise<vo
       // 定时器已经触发，句柄作废；stop 时靠它判断是否还有待触发的定时器
       cx.jobTimer = null;
 
-      // 到点时状态可能已经变了（stop / pause）
-      if (cx.jobState !== CronjobState.Running) {
+      // 到点时状态可能已经变了（stop）
+      if (cx.jobState === CronjobState.Stopped) {
+        return;
+      }
+
+      // 暂停期间定时器照常走，只是不执行；否则事件循环会空掉，进程在下一个分钟边界自行退出
+      if (cx.jobState === CronjobState.Paused) {
+        schedule();
         return;
       }
 

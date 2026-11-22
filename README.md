@@ -51,8 +51,10 @@ const task = await cronjob({ dir: './cronjob' });
 Then let pm2 keep it alive:
 
 ```bash
-pm2 start main.js --name cronjob --log cronjob-runner/main.log
+pm2 start main.js --name cronjob --log cronjob-runner/main.log --no-treekill
 ```
+
+> **Keep `--no-treekill`.** pm2 kills the whole process tree by default. Jobs are spawned detached and unref'd, but they are still in pm2's tree, so `pm2 restart` / `pm2 stop` would kill a job that is still running — with no `[EXIT]` line, because the runner exits first. With `--no-treekill` (or `treekill: false` in an ecosystem file) running jobs survive a deploy. The runner is also a single-instance daemon: start it in fork mode, not with `-i` (see below).
 
 `cronjob()` resolves to a controller with `stop()` / `pause()` / `resume()`.
 
@@ -260,6 +262,8 @@ These are deliberate, not missing features:
 - **The timer is minute-aligned, not second-aligned.** If the process is busy or the host is suspended across a boundary, the tick happens when the event loop gets to it, and there is no catch-up for the missed minute.
 
 The runner itself is kept alive by pm2. If the runner dies, nothing runs until pm2 restarts it.
+
+Run it in pm2 **fork mode** (the default). With `-i` (cluster mode) every worker shares one task directory; the single-instance lock lets only the first worker schedule, and the others exit with `cronjob-js already running` and are restarted by pm2 in a loop.
 
 ## License
 

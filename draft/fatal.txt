@@ -1,6 +1,6 @@
 cronjob-runner 问题清单
-最后更新：2026-11-22（第六轮审查，F23/F24 修复确认）
-检查版本：main @ c78b273 + 测试/import 修补，工作区有未提交改动
+最后更新：2026-11-22（第六轮审查，F23–F28 已修复，F29 判定不修）
+检查版本：main @ a98809a + 本轮改动（未提交）
 运行环境：Node v26.13.1 / WSL2
 
 约定：
@@ -109,49 +109,45 @@ cronjob-runner 问题清单
    实测：'./g'、'/tmp/cjrepro/g'、'/tmp/cjrepro/g/' 后两个被拒绝；符号链接与真实目录被识别为同一锁；
    projA/projB 都写 './cronjob' 时各自拿到锁。config / initialize 测试各补了用例。
 
+✅ F26 pm2 cluster 模式下单例锁失效
+   改为 server.listen({ path: LOCK_NAME, exclusive: true })：cluster 下不再由 primary 代绑共享句柄。
+   node:cluster 模拟：第二个 worker 得到 EADDRINUSE，initialize 照旧 reject。
+   真实 pm2 7.1.2 `-i 2`（cluster_mode）：2 个 worker 里只有 1 个 "Cronjob start!"，
+     另一个 cronjob() reject "cronjob-js already running"；fork 模式行为不变。
+   遗留：被拒的 worker 会被 pm2 反复重启（误用 -i 的部署问题）。
+   代码不处理，改为文档约定：runner 用 fork 模式跑，README / CLAUDE.md 已写明。
+
+✅ F27 pm2 restart / stop 会杀掉正在跑的任务
+   pm2 默认 treekill，按进程树杀子进程，detached + unref 挡不住（pm2 7.1.2 fork 模式实测：
+   restart 时 "process tree killed (2 pids)"，long.js 被杀，且没有 [EXIT]；加 --no-treekill 后存活）。
+   修复（仅文档）：README 的 pm2 命令加 --no-treekill 并说明原因、误用 -i 的后果；
+   CLAUDE.md 的职责边界与日志章节同步写明。
+
+✅ F28 pause() 之后，进程会在下一个分钟边界自行退出（code 0）
+   原因是到点看到 Paused 就直接 return，不再排下一轮；锁 server 又是 unref 的，事件循环随之空掉。
+   修复：schedule() 只在 Stopped 时停链；到点分支在 Paused 时照常 schedule()，只跳过 fn。
+   实测（结构与 example/main.js 相同）：暂停 90 秒后进程仍存活，resume() 后继续调度，stop() 后正常退出。
+   tests/task.test.ts 补了"暂停期间每轮都重排定时器"，并在 stop 用例里断言 jobTimer === null。
+
+🟡 F29 系统时钟往回拨时，同一分钟会再跑一次 —— 不修，与 vixie cron 行为一致
+   实测对照 Debian cron 3.0pl1 源码（/usr/sbin/cron）：cron_sync 只做一次对齐，
+   之后 TargetTime 每轮固定 += 60，cron_tick 用 TargetTime 而不是 wall clock 判断，
+   所以回拨后同一分钟不会重跑（代价是拨快时可能连续跳过几分钟）。
+   本项目的循环本来就是"先排下一轮再跑"，回拨后下一次 tick 用的是当前时钟，
+   确实会再命中一次；但这只在 NTP 把偏快的钟拨回来时发生，且与 F39 的夏令时重复一致。
+   结论：接受为已知行为，不改代码。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ c78b273 + 本轮的修补（F23、F24、F25 已转入上方已修复区）
+检查版本：main @ a98809a + 本轮修补（F23–F28 已转入上方已修复区）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 165/165 均通过；下面的问题现有测试都没有覆盖。
+tsc、oxlint（4 条 warning，见 F41）、vitest 166/166 均通过；下面的问题现有测试都没有覆盖。
 
-🟠 F26 pm2 cluster 模式下单例锁失效
-   cluster worker 的 listen 由 primary 代为执行并共享句柄，两个 worker 能同时拿到同名锁。
-   node:cluster fork 2 个 worker 模拟：两个 worker 都 ACQUIRED，所有任务会被跑 N 次。
-   修法：server.listen({ path: LOCK_NAME, exclusive: true })。
-     node:cluster 模拟：第二个 worker 得到 EADDRINUSE，initialize 照旧 reject。
-     真实 pm2 7.1.2 `-i 2`（cluster_mode）：2 个 worker 中只有 1 个 "Cronjob start!"，
-       另一个 cronjob() reject "cronjob-js already running"。
-     只改一行，fork 模式的现有行为不变。
-   注意：cluster 模式下锁保住了"只跑一份"，但被拒绝的 worker 退出后 pm2 会反复重启
-     （实测日志里连续多次 rejected）。部署脚本应在 cronjob() reject 时打印原因并正常退出，
-     更要紧的是：runner 就该用 fork 模式跑，`-i` 是误用；exclusive 只是兜底。
-   备选（不推荐）：改用 flock / 文件锁 —— 要自己处理过期锁和清理，
-     与现在"进程退出由内核自动释放"的语义冲突，复杂度更高。
-
-🟠 F27 按 README 的 pm2 命令部署时，pm2 restart / stop 会杀掉正在跑的任务
-   pm2 默认开启 treekill，按进程树杀子进程，detached + unref 挡不住。
-   pm2 7.1.2 实测（fork 模式）：pm2 restart 时 pm2.log 记录 "process tree killed (2 pids)"，
-   正在跑的 long.js 被杀，任务日志只有开头一行，主日志也没有 [EXIT]（runner 已经先退出）。
-   加上 --no-treekill 后任务存活。
-   这与 CLAUDE.md 的 "spawn 后 unref，不等待、不杀" 不符，而且每次部署都会静默发生。
-   修复：README 和 example 里的 pm2 命令加 --no-treekill（或在 ecosystem 里写 treekill: false）。
-
-🟠 F28 pause() 之后，进程会在下一个分钟边界自行退出（code 0）
-   定时器到点看到 Paused 就直接 return，不再排下一轮；锁 server 又是 unref 的，事件循环就空了。
-   实测（结构与 example/main.js 相同）：:56 调用 pause()，:00.005 进程以 code 0 退出。
-   pm2 对 code 0 也会自动重启，重启后状态回到 Running，暂停被悄悄取消。
-   TaskController.pause 的注释"定时器继续走"和 resume 里"暂停期间定时器没有停"都与实际不符。
-   修复：Paused 时照常 schedule()，只跳过 fn。
-
-🟠 F29 系统时钟往回拨时，同一分钟会再跑一次
-   tick 只看"当前时间截到分钟"，不记录上一次跑的是哪一分钟。
-   模拟回拨 90s：tick#1 跑了 01:23，回拨后 tick#2 仍是 01:23，这一分钟命中的任务全部再 spawn 一次。
-   触发条件：NTP 或手动校时把偏快的时钟拨回来。
-   修复：记住上一次执行的分钟，now <= last 时跳过。这是去重，不是补跑。
+🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 / 🟠✅ F26 / 🟠✅ F27 / 🟠✅ F28 → 已修复，见上方。
+🟡✅ F29 → 不修，与 vixie cron 行为一致，见上方。
 
 🟡 F30 dir 里有 FIFO 或卡住的挂载时，runner 会静默停摆（触发少见，后果是所有任务停跑）
    readFile 打开 FIFO 会一直阻塞，占住 libuv 线程池里的一个线程（默认 4 个）。

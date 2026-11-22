@@ -78,6 +78,17 @@ describe('runTask — pause / resume / stop', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
+  it('keeps rescheduling while paused, so the process does not exit at the minute boundary', async () => {
+    // 锁 server 是 unref 的，暂停期间若不再排定时器，事件循环就空了，进程会以 code 0 自行退出
+    const { task, fn, cx } = setup();
+    task.pause();
+    for (let i = 0; i < 5; i++) {
+      await vi.advanceTimersByTimeAsync(MINUTE);
+      expect(cx.jobTimer).not.toBeNull();
+    }
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it('resume after pause starts firing again', async () => {
     const { task, fn } = setup();
     task.pause();
@@ -99,13 +110,14 @@ describe('runTask — pause / resume / stop', () => {
   });
 
   it('stop during a paused state is still final', async () => {
-    const { task, fn } = setup();
+    const { task, fn, cx } = setup();
     task.pause();
     task.stop();
 
     task.resume(); // 对 Stopped 无效
     await vi.advanceTimersByTimeAsync(MINUTE * 2);
     expect(fn).not.toHaveBeenCalled();
+    expect(cx.jobTimer).toBeNull();
   });
 
   it('is idempotent: stop / pause / resume can be called repeatedly', () => {

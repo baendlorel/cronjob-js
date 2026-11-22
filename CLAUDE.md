@@ -7,7 +7,8 @@
 - 每分钟 glob 一次脚本，读脚本顶部注释里的 5 段 cron，命中才 spawn。
 - spawn 后 unref，不等待、不杀、不限制并发；任务跑多久、是否重叠，由任务自己负责。
 - 脚本失败（崩溃、非 0 退出）不做告警，人工看脚本旁的日志。
-- runner 自身的存活和单实例由 pm2 保证；代码里只保留启动时的单例检查。
+- runner 自身的存活和单实例由 pm2 保证（fork 模式，不要用 `-i`）；代码里只保留启动时的单例检查。
+- pm2 必须加 `--no-treekill`（或在 ecosystem 里写 `treekill: false`）：默认的 treekill 会在 restart/stop 时连正在跑的任务一起杀掉，且不会有 `[EXIT]` 日志。
 - 不引入 adapter、wrapper、helper、兼容层；旧逻辑直接删。
 
 ## 脚本约定
@@ -24,7 +25,7 @@
 
 ## 日志
 
-- 主日志：pm2 --log cronjob-runner/main.log，即进程 stdout。
+- 主日志：pm2 --log cronjob-runner/main.log（启动加 `--no-treekill`），即进程 stdout。
 - 事件行格式：`<dtm> <TAG> <内容>`，TAG 为 `[INFO]` / `[WARN]` / `[ERROR]` / `[SPAWN]` / `[EXIT]` / `[DEBUG]`。
 - 三个任务生命周期事件：
   - `[SPAWN] path=<相对路径> pid=<pid>`
