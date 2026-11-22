@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 
 import { Tag } from '../src/consts.js';
-import { createContext } from '../src/config.js';
+import { createContext } from '../src/context/index.js';
 
 describe('createContext — 默认值', () => {
   it('applies documented defaults', () => {

@@ -3,7 +3,6 @@ import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { getJobItem } from '../src/syntax/extract.js';
-import { loadRuntime } from '../src/interpreter.js';
 import { run } from '../src/run.js';
 import { createTestContext } from './helpers.js';
 
@@ -12,9 +11,6 @@ import { createTestContext } from './helpers.js';
  * glob → 读文件 → 解析头部 → 决定解释器。用来确认“示例脚本”和测试素材不会漂移。
  */
 const JOBS = new URL('../example/jobs/', import.meta.url).pathname;
-
-// 解释器映射由 cronjob() 启动时 loadRuntime() 填好，测试里手动走一遍
-loadRuntime();
 
 const waitFor = async (predicate: () => boolean, timeout = 10_000) => {
   const start = Date.now();

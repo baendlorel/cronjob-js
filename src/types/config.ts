@@ -1,5 +1,6 @@
 import type { CronjobState, Tag } from '../consts.js';
 import type { CronjobLogger } from './global.js';
+import type { Runtime } from '../context/interpreter.js';
 
 export interface UserCronjobConfig {
   /**
@@ -61,6 +62,11 @@ export interface CronjobContext extends UserCronjobConfig {
    * 时间格式化器，日志与 list 输出都用它
    */
   timeFormat: Intl.DateTimeFormat;
+  /**
+   * 运行时探测结果：解释器映射、tsx 是否可用、python 命令
+   * - 由 createContext 一次填好，调度和 --list 共用同一份，不会再出现两处不一致
+   */
+  runtime: Runtime;
   /**
    * 很多地方传参都是这个样子的，因此直接给一个方便不要反复创建
    */

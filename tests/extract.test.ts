@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { Tag } from '../src/consts.js';
-import { loadRuntime } from '../src/interpreter.js';
 import { getJobItem } from '../src/syntax/extract.js';
 import { createTestContext, logsOf } from './helpers.js';
-
-// 解释器映射现在由 cronjob() 启动时探测；纯函数测试里显式加载一次
-loadRuntime();
 
 const item = (content: string, filepath = '/virtual/dir/x.js', ctx = createTestContext()) => {
   const { cx, logs } = ctx;

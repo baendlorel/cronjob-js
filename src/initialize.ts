@@ -4,7 +4,7 @@ import { mkdirSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import net from 'node:net';
 
-import { CMD_NONE, type Runtime } from './interpreter.js';
+import { CMD_NONE } from './context/interpreter.js';
 import { DIR_MODE } from './consts.js';
 
 /** 持有引用，防止 unref 后的 server 被 GC，导致锁被提前释放 */
@@ -13,15 +13,15 @@ let _lock: net.Server | null = null;
 /**
  * 检查 tsx 是否可用；没有只警告，纯 js/sh 任务仍可运行
  */
-const orTsx = (cx: CronjobContext, runtime: Runtime) => {
-  if (!runtime.hasTsx) {
+const orTsx = (cx: CronjobContext) => {
+  if (!cx.runtime.hasTsx) {
     cx.log.warn(`'tsx' not found, .ts files will be run by node directly. Not all nodejs versions supports this.`);
   }
 };
 
-const orPython = (cx: CronjobContext, runtime: Runtime) => {
-  if (runtime.pythonCmd !== CMD_NONE) {
-    cx.log.info(`python available, .py files will be run by ${runtime.pythonCmd}`);
+const orPython = (cx: CronjobContext) => {
+  if (cx.runtime.pythonCmd !== CMD_NONE) {
+    cx.log.info(`python available, .py files will be run by ${cx.runtime.pythonCmd}`);
   } else {
     cx.log.warn('python not available, .py jobs will be ignored');
   }
@@ -99,11 +99,11 @@ const acquireLock = (cx: CronjobContext) =>
     });
   });
 
-export const initialize = async (cx: CronjobContext, runtime: Runtime) => {
+export const initialize = async (cx: CronjobContext) => {
   // 先拿锁：重复实例不必再做后面的探测
   await acquireLock(cx);
   ensureDir(cx);
   checkDirPermissions(cx);
-  orTsx(cx, runtime);
-  orPython(cx, runtime);
+  orTsx(cx);
+  orPython(cx);
 };

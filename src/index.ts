@@ -6,14 +6,13 @@
 import type { UserCronjobConfig } from './types/config.js';
 import { performance } from 'node:perf_hooks';
 
-import { createContext } from './config.js';
+import { createContext } from './context/index.js';
 import { CronjobState } from './consts.js';
 import { tryGlobSync } from './utils.js';
 import { runTask, type TaskController } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
-import { loadRuntime } from './interpreter.js';
 import { list } from './list.js';
 
 export type { TaskController } from './cron/task.js';
@@ -27,17 +26,13 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
   const cx = createContext(config);
   cx.log.info(`Config loaded: ${JSON.stringify(cx)}`);
 
-  // 先探测运行时："tsx / python 可不可用"必须在开始调度前告诉用户；
-  // --list 展示的也是实际命令，同样需要真实映射，不能在 fallback 上列（F47）
-  const runtime = loadRuntime();
-
   if (process.argv.includes('--list') || process.argv.includes('-l')) {
     // 列出所有任务看一下效果就退出
     await list(cx);
     process.exit(0);
   }
 
-  await initialize(cx, runtime);
+  await initialize(cx);
 
   const taskFn = async (now: Date) => {
     // 1、查找CRONJOB_DIR下面的所有符合suffix的文件

@@ -24,7 +24,14 @@
 - `@cronbegin` / `@cronend` 块内是“或”：同一块命中多少条都只 spawn 一次（按 group 去重）。
   块嵌套、不成对时整个文件不调度，记 Error 日志。块内每行仍要写 `@cron`。
 - 启动时检测 tsx：缺失只警告，.ts 回退到 node 直接跑（不保证所有语法可用）；.js/.sh 不受影响。
+  检测只查 PATH、不执行 `--version`。
 - 文件首行 shebang 优先于默认解释器（`#!/usr/bin/env node`、`#!/bin/bash -e` 等均可）。
+
+## 上下文
+
+- `src/context/` 产出 `cx`：配置校验与默认值、格式化器、`cx.log`、运行时映射 `cx.runtime`。
+  `createContext()` 是唯一入口，`--list` 与调度共用同一个 `cx.runtime`，解释器不会出现两套答案。
+- `src/types/config.ts` 只放类型（`UserCronjobConfig` / `CronjobContext`），不放实现。
 
 ## 日志
 

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from 'node:process';
 
-import { CMD_NONE } from './interpreter.js';
+import { CMD_NONE } from './context/interpreter.js';
 import { LOG_FILE_MODE } from './initialize.js';
 
 export function run(cx: CronjobContext, { filepath, interpreter }: Job) {

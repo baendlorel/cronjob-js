@@ -1,7 +1,7 @@
 import type { CronjobContext } from '../src/types/config.js';
 import type { Tag } from '../src/consts.js';
 
-import { createContext } from '../src/config.js';
+import { createContext } from '../src/context/index.js';
 
 export interface LogRecord {
   tag: Tag;

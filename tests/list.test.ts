@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { list } from '../src/list.js';
-import { loadRuntime } from '../src/interpreter.js';
 import { createTestContext } from './helpers.js';
 
 /**
  * list 用 console.log 输出表格（不走 cx.log），这里把它接住。
- * - loadRuntime() 模拟 cronjob() 的启动流程：--list 之前就会探测一次，
+ * - createTestContext 会在创建 cx 时一并探测运行时（cx.runtime），
  *   list 里的解释器列才与实际调度一致（F47）
  */
 const capture = async (dir: string, timezone = 'Asia/Shanghai') => {
@@ -15,7 +14,6 @@ const capture = async (dir: string, timezone = 'Asia/Shanghai') => {
     lines.push(args.join(' '));
   });
   try {
-    loadRuntime();
     const { cx, logs } = createTestContext({ dir, timezone });
     await list(cx);
     return { lines, logs, cx };
@@ -44,7 +42,7 @@ describe('list', () => {
 
   it('解释器列是探测后的真实命令，不是 none（F47）', async () => {
     const { lines } = await capture(JOBS);
-    // 以前 --list 在 loadRuntime() 之前就退出，.sh / .ts 会显示成 "none"
+    // 以前 --list 在探测之前就退出，.sh / .ts 会显示成 "none"
     expect(lines.every((l) => !l.includes(' none '))).toBe(true);
     expect(lines.find((l) => l.includes('backup.sh'))).toMatch(/\/(bin\/)?bash -e/);
   });

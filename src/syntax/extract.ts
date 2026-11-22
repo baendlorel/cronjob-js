@@ -5,7 +5,7 @@ import type { CronjobContext } from '../types/config.js';
 import { extname, relative } from 'node:path';
 import { type CronBlockMaker, Marker } from '../consts.js';
 import { parseExp } from '../cron/parse.js';
-import { getDefaultInterpreter } from '../interpreter.js';
+import { getDefaultInterpreter } from '../context/interpreter.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
 
@@ -174,7 +174,7 @@ export function getJobItem(cx: CronjobContext, filepath: string, content: string
     return null;
   }
 
-  const interpreter = shebang ?? getDefaultInterpreter(ext);
+  const interpreter = shebang ?? getDefaultInterpreter(cx.runtime, ext);
 
   return { flatCronGroups: list, interpreter, filepath };
 }
