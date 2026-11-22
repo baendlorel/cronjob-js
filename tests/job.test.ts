@@ -133,7 +133,7 @@ describe('loadFiles', () => {
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
 
-    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-load-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'krontab-load-'));
     const okPath = path.join(dir, 'ok.js');
     const missingPath = path.join(dir, 'missing.js');
     await writeFile(okPath, '// @cron * * * * *\n', 'utf8');
@@ -150,7 +150,7 @@ describe('loadFiles', () => {
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
 
-    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-load-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'krontab-load-'));
     const paths = Array.from({ length: 205 }, (_, i) => path.join(dir, `f${i}.js`));
     await Promise.all(paths.map((p, i) => writeFile(p, String(i), 'utf8')));
 
@@ -164,7 +164,7 @@ describe('loadFiles', () => {
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
 
-    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-fifo-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'krontab-fifo-'));
     const fifo = path.join(dir, 'pipe.js');
     const okPath = path.join(dir, 'real.js');
     execFileSync('mkfifo', [fifo]);
@@ -188,7 +188,7 @@ describe('loadFiles', () => {
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
 
-    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-big-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'krontab-big-'));
     const bigPath = path.join(dir, 'bundle.js');
     const body = `console.log("${'x'.repeat(90)}");\n`.repeat(5000);
     await writeFile(bigPath, `// @cron * * * * *\n${body}`, 'utf8');

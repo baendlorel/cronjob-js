@@ -10,7 +10,7 @@ import { cronjob } from '../src/index.js';
 /** 上海时间 12:00:30.500，让首轮在 29.5s 后触发 */
 const START = new Date('2026-11-21T12:00:30.500+08:00');
 
-const tempDir = () => mkdtempSync(path.join(tmpdir(), 'cronjob-js-e2e-'));
+const tempDir = () => mkdtempSync(path.join(tmpdir(), 'krontab-e2e-'));
 
 const writeJob = (dir: string, name: string, content: string) => {
   const p = path.join(dir, name);
@@ -217,7 +217,7 @@ describe('cronjob — 端到端', () => {
     const dir = tempDir();
     const task = await cronjob({ dir, write: () => {} });
 
-    await expect(cronjob({ dir, write: () => {} })).rejects.toThrow('cronjob-js already running');
+    await expect(cronjob({ dir, write: () => {} })).rejects.toThrow('krontab already running');
 
     task.stop();
     vi.useRealTimers();

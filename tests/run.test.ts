@@ -46,7 +46,7 @@ interface Harness {
 
 const makeHarness = (opts: { ext?: string; pid?: number; cmd?: string } = {}): Harness => {
   const ext = opts.ext ?? '.js';
-  const dir = mkdtempSync(path.join(tmpdir(), 'cronjob-js-run-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'krontab-run-'));
   const relpath = path.join('sub', `job${ext}`);
   const filepath = path.join(dir, relpath);
   mkdirSync(path.dirname(filepath), { recursive: true });

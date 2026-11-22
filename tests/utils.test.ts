@@ -9,7 +9,7 @@ import { tryGlobSync } from '../src/utils.js';
 import { createTestContext } from './helpers.js';
 
 const makeTree = (files: string[]) => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'cronjob-js-glob-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'krontab-glob-'));
   for (const f of files) {
     const abs = path.join(dir, f);
     mkdirSync(path.dirname(abs), { recursive: true });

@@ -299,6 +299,19 @@ cronjob-runner 问题清单
    types/config.ts 的 include 注释改为 `['**/*.{ts,js,sh}']`（注释里用 &#47; 写出，
    避免 */ 提前结束块注释）；exclude 注释补上全部 8 个默认目录，并写明 exclude 是整体替换。
 
+🟡✅ F50 权限检查只看 dir / logDir 本身，不看父目录和子目录 —— 不修，只写进文档
+   F40 的威胁模型是"能写 dir 就等于能以 runner 身份执行代码"，这个检查有两个缺口：
+   (a) 父目录：dir=…/shared/jobs，shared 是 777、jobs 是 755 → 检查通过、正常启动。
+       其他用户可以把 jobs 改名移走，再放一个自己建的 jobs 目录。
+   (b) 子目录：dir 是 755，dir/team/ 是 777 → 检查通过，team/x.js 照常被 glob 和执行。
+   两者都需要错误配置的共享目录才会触发，属于检查的完整性问题，不是新漏洞。
+   修法候选：(a) 沿 realpath 向上逐层检查到 /（sticky bit 的 /tmp 除外）；
+           (b) loadFiles 里 stat 已经拿到 mode/uid，顺手拒绝属主不对或 other 可写的脚本。
+   结论：不做。逐层向上检查会引入一长串平台差异（sticky bit、符号链接、Windows），
+   与"极简、不为错误配置兜底"的定位不符。
+   已处理（仅文档）：README 的 Permissions 一节写明"只检查 dir / logDir 本身，
+   不向上看父目录、也不重新检查子目录"，并给出两种绕过场景，把责任交给部署方。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 ══ 待修复（第七轮审查）══════════════════════
@@ -307,17 +320,8 @@ cronjob-runner 问题清单
 运行环境：Node v26.13.1 / pm2 7.1.2 / WSL2（/etc/login.defs：UMASK 022，USERGROUPS_ENAB yes）
 pnpm check、oxlint（0 warning）、vitest 176/176 均通过；下面的问题这些检查都没有覆盖。
 
-🟠✅ F44 / 🟠✅ F45 / 🟡✅ F46 / 🟡✅ F47 / 🟡✅ F48 / 🟡✅ F49 → 已修复，见上方。
+🟠✅ F44 / 🟠✅ F45 / 🟡✅ F46 / 🟡✅ F47 / 🟡✅ F48 / 🟡✅ F49 / 🟡✅ F50 → 已修复（F50 仅文档），见上方。
 
-🟡 F50 权限检查只看 dir / logDir 本身，不看父目录和子目录
-   F40 的威胁模型是"能写 dir 就等于能以 runner 身份执行代码"，但这个检查有两个缺口：
-   (a) 父目录：dir=…/shared/jobs，shared 是 777、jobs 是 755 → 检查通过、正常启动。
-       其他用户可以把 jobs 改名移走，再放一个自己建的 jobs 目录。
-   (b) 子目录：dir 是 755，dir/team/ 是 777 → 检查通过，team/x.js 照常被 glob 和执行。
-   程度：都需要错误配置的共享目录才会触发，属于检查的完整性问题，不是新漏洞。
-   修法候选：(a) 沿 realpath 向上检查到 / 为止，每层都不能是 other 可写（sticky bit 的 /tmp 除外）；
-           (b) loadFiles 里 stat 已经拿到 mode/uid，可以顺便拒绝属主不对或 other 可写的脚本。
-   如果不打算做，至少在 README 的 Permissions 一节写明只检查这两个目录本身。
 
 ── 已排查、未发现问题 ──
    #!/usr/bin/env -S node --no-warnings 拆成 cmd + args 后能正常运行。

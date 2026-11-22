@@ -87,10 +87,10 @@ const acquireLock = (cx: CronjobContext) =>
      * exclusive: true —— cluster 模式下 listen 默认交给 primary 代绑并共享句柄，
      * 每个 worker 都会"成功"，锁就失效了；exclusive 让每个 worker 自己真绑，第二个拿到 EADDRINUSE。
      */
-    const LOCK_NAME = '\0cronjob-js-' + createHash('sha1').update(lockKeyOf(cx.dir)).digest('hex').slice(0, 8);
+    const LOCK_NAME = '\0krontab-' + createHash('sha1').update(lockKeyOf(cx.dir)).digest('hex').slice(0, 8);
     const server = net.createServer();
     server.once('error', (e: NodeJS.ErrnoException) => {
-      reject(e.code === 'EADDRINUSE' ? new Error('cronjob-js already running') : e);
+      reject(e.code === 'EADDRINUSE' ? new Error('krontab already running') : e);
     });
     server.listen({ path: LOCK_NAME, exclusive: true }, () => {
       server.unref(); // 不阻止进程退出

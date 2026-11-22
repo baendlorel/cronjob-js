@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { initialize } from '../src/initialize.js';
 import { createTestContext } from './helpers.js';
 
-const tempDir = () => mkdtempSync(path.join(tmpdir(), 'cronjob-js-init-'));
+const tempDir = () => mkdtempSync(path.join(tmpdir(), 'krontab-init-'));
 
 describe('initialize', () => {
   it('creates dir and logDir when missing', async () => {
@@ -77,7 +77,7 @@ describe('initialize', () => {
     await initialize(createTestContext({ dir }).cx);
 
     const pending = initialize(createTestContext({ dir }).cx);
-    await expect(pending).rejects.toThrow('cronjob-js already running');
+    await expect(pending).rejects.toThrow('krontab already running');
   });
 
   it('uses different locks for different dirs', async () => {

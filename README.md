@@ -1,4 +1,4 @@
-# cronjob-js
+# krontab
 
 A minimal, JS-native crontab.
 
@@ -6,12 +6,14 @@ Drop a script in a directory, write a 5-field cron expression in its header comm
 
 No retries, no catch-up runs, no overlap protection, no process supervision. If a job ran or not, read the log.
 
+The name is a nod to `crontab` with a `K` — meaning both "kron" (time) and the author's initial. The package still exports one function, `cronjob()`; if you are upgrading from `cronjob-js`, the only changes are the package name, the import specifier, and the lock name (see [Permissions](#permissions)).
+
 ## Install
 
 ```bash
-pnpm add cronjob-js
+pnpm add krontab
 # or
-npm i cronjob-js
+npm i krontab
 ```
 
 Requires **Node.js >= 22.14.0**.
@@ -43,7 +45,7 @@ Start the runner from your project root:
 
 ```js
 // main.js
-import { cronjob } from 'cronjob-js';
+import { cronjob } from 'krontab';
 
 const task = await cronjob({ dir: './cronjob' });
 ```
@@ -219,7 +221,7 @@ await cronjob({
 
 ### `cronjob(config?): Promise<TaskController>`
 
-Starts the minute-based scheduler. Immediately takes a single-instance lock keyed by a hash of `dir` — a second runner on the same directory throws `cronjob-js already running`. The lock is an abstract Unix socket, so the OS releases it when the process dies, including `SIGKILL`.
+Starts the minute-based scheduler. Immediately takes a single-instance lock keyed by a hash of `dir` — a second runner on the same directory throws `krontab already running`. The lock is an abstract Unix socket, so the OS releases it when the process dies, including `SIGKILL`.
 
 If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule table and calls `process.exit(0)` instead of starting the scheduler. No lock is taken in that branch.
 
@@ -227,7 +229,16 @@ If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule tab
 
 On startup `cronjob()` checks that `dir` and `logDir` are owned by the current user and are **not group- or world-writable**, and throws rather than starting if not. Directories it creates itself are made with mode `0755` regardless of umask, so they pass that check on `umask 002` machines (Debian/Ubuntu with `USERGROUPS_ENAB`) as well as `022` ones. Both directories are equivalent to code execution as the runner's user — anyone who can write `dir` can drop a script, and anyone who can write `logDir` can append to job logs. `/tmp`-style shared directories are rejected by design. Custom log files are created with mode `0640`; existing files are appended to without changing their mode. The check is skipped when running as root (root can write anywhere, so it proves nothing) and on platforms without `process.getuid` (Windows).
 
-The lock name is derived from `dir`, so it is predictable; any local process that binds that abstract socket first will make the runner report `cronjob-js already running`. That is a local denial of service at worst — it cannot be used to make the runner execute anything.
+The check covers **`dir` and `logDir` themselves only** — it does not walk up to their parents and does not re-check subdirectories:
+
+- A world-writable **parent** passes: with `/srv/shared` at `777` containing `jobs` at `755`, another user can rename `jobs` away and put their own directory in its place.
+- A world-writable **subdirectory** inside `dir` passes: `dir/team` at `777` still lets `team/x.js` be globbed and spawned.
+
+Deciding what is safe to scan is left to deployment: keep `dir` and everything below it writable by the runner's user only.
+
+The lock name is derived from `dir`, so it is predictable; any local process that binds that abstract socket first will make the runner report `krontab already running`. That is a local denial of service at worst — it cannot be used to make the runner execute anything.
+
+> **Upgrading from `cronjob-js`:** the lock name changed from `cronjob-js-…` to `krontab-…`. If an old runner is still running on the same `dir`, a new one will **not** detect it and both will schedule. Stop the old process before starting the new one.
 
 ### `UserCronjobConfig`
 
@@ -312,7 +323,7 @@ These are deliberate, not missing features:
 
 The runner itself is kept alive by pm2. If the runner dies, nothing runs until pm2 restarts it.
 
-Run it in pm2 **fork mode** (the default). With `-i` (cluster mode) every worker shares one task directory; the single-instance lock lets only the first worker schedule, and the others exit with `cronjob-js already running` and are restarted by pm2 in a loop.
+Run it in pm2 **fork mode** (the default). With `-i` (cluster mode) every worker shares one task directory; the single-instance lock lets only the first worker schedule, and the others exit with `krontab already running` and are restarted by pm2 in a loop.
 
 ## License
 

@@ -16,6 +16,7 @@ import { initialize } from './initialize.js';
 import { list } from './list.js';
 
 export type { TaskController } from './cron/task.js';
+export { UserCronjobConfig };
 
 /**
  * 启动定时任务主理，返回控制器
