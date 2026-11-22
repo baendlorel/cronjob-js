@@ -9,7 +9,7 @@ export default defineConfig([
     dts: true,
     clean: true,
     sourcemap: true,
-    minify: !isDev,
+    minify: false,
     target: 'node22',
     treeshake: !isDev,
   },
