@@ -67,7 +67,7 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>, runtime: R
     throw new TypeError('`write` must be a function');
   }
 
-  // Validate timezone by attempting to create a DateTimeFormat with it
+  // 用 Intl 构造一次来校验时区，非法时区会抛 RangeError
   new Intl.DateTimeFormat('en-US', { timeZone: timezone });
 
   if (!Array.isArray(include) || include.some((pattern) => typeof pattern !== 'string')) {

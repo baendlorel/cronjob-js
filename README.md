@@ -1,5 +1,7 @@
 # krontab
 
+English | [简体中文](README.zh.md)
+
 A minimal, JS-native crontab.
 
 Drop a script in a directory, write a 5-field cron expression in its header comment, and the runner will spawn it when the expression matches — once per minute, nothing more.

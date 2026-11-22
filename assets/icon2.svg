@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- 背景圆 -->
+  <circle cx="50" cy="50" r="46" fill="#1E293B" />
+  <!-- 表盘外圈 -->
+  <circle cx="50" cy="50" r="38" fill="none" stroke="#38BDF8" stroke-width="3" />
+  <!-- 时钟刻度（12点、3点、6点、9点） -->
+  <line x1="50" y1="16" x2="50" y2="24" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+  <line x1="84" y1="50" x2="76" y2="50" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+  <line x1="50" y1="84" x2="50" y2="76" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+  <line x1="16" y1="50" x2="24" y2="50" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" />
+  <!-- 字母 K 作为指针 -->
+  <path d="M42 32 L42 68 M42 50 L62 32 M42 50 L62 68" fill="none" stroke="#38BDF8" stroke-width="5"
+    stroke-linecap="round" stroke-linejoin="round" />
+</svg>

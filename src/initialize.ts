@@ -77,7 +77,7 @@ const lockKeyOf = (dir: string) => {
 /**
  * 绑定成功则 resolve（进程活着就一直占着）；
  * 已被占用则 reject —— 不 process.exit，由宿主决定怎么退。
- * @returns {Promise<void>}
+ * @returns 拿到锁后 resolve；锁已被占用则 reject
  */
 const acquireLock = (cx: CronjobContext) =>
   new Promise<void>((resolve, reject) => {

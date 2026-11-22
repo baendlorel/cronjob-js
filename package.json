@@ -30,7 +30,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "README.zh.md"
   ],
   "homepage": "https://github.com/baendlorel/krontab#readme",
   "repository": {

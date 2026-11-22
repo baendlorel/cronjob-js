@@ -4,55 +4,55 @@ import type { Runtime } from '../context/interpreter.js';
 
 export interface UserCronjobConfig {
   /**
-   * Will scan this directory for cronjob scripts
+   * 扫描任务脚本的目录
    */
   dir: string;
 
   /**
-   * Will put log files there.
-   * - Share the same structure as the cronjob scripts directory
-   * default value is the same as `this.dir`
+   * 任务日志的存放目录
+   * - 目录结构与任务脚本目录保持一致
+   * 默认值与 `dir` 相同
    */
   logDir: string;
 
   /**
-   * Glob expressions to get cronjob scripts.
-   * - Will be passed to fs.glob
+   * 用来匹配任务脚本的 glob 表达式
+   * - 会原样传给 fs.glob
    *
-   * default value is `['**&#47;*.{ts,js,sh}']` (i.e. `**` slash `*.{ts,js,sh}`)
+   * 默认值是 `['**&#47;*.{ts,js,sh}']`（即 `**` 斜杠 `*.{ts,js,sh}`）
    */
   include: string[];
 
   /**
-   * Glob expressions to exclude cronjob scripts.
-   * - Will be passed to fs.glob as `exclude`
-   * - Replaces the default entirely (the two arrays are not merged)
-   * - default value drops node_modules, .git, .vscode, .claude, __pycache__,
-   *   dist, dist-tsc and coverage, each at any depth
+   * 排除任务脚本的 glob 表达式
+   * - 会作为 `exclude` 传给 fs.glob
+   * - 整体替换默认值（两个数组不会合并）
+   * - 默认值排除 node_modules、.git、.vscode、.claude、__pycache__、
+   *   dist、dist-tsc、coverage，任意层级都生效
    */
   exclude: string[];
 
   /**
-   * Affects log time and cron parsing.
+   * 影响日志时间戳和 cron 解析
    *
-   * default value is `"Asia/Shanghai"`
+   * 默认值是 `"Asia/Shanghai"`
    */
   timezone: string;
 
   /**
-   * The working directory for the running cronjob scripts.
-   * - Use function to determine dynamic cwd by the script path.
+   * 任务进程的工作目录
+   * - 传函数可以按脚本路径动态决定
    *
-   * default value is the same as `this.dir`
+   * 默认值与 `dir` 相同
    */
   jobcwd: string | ((scriptPath: string) => string);
 
   /**
-   * Function to write logs.
-   * @param tag The tag for the log entry.
-   * @param args The arguments to log.
+   * 输出日志的函数
+   * @param tag 日志标记
+   * @param args 要记录的内容
    *
-   * default value writes `<dtm> <tag> <args>` to console
+   * 默认值把 `<dtm> <tag> <args>` 写到 console
    */
   write: (tag: Tag, ...args: any[]) => void;
 }
@@ -74,7 +74,7 @@ export interface CronjobContext extends UserCronjobConfig {
 
   // # 这是增加的字段
   /**
-   * The current state of the cronjob.
+   * 当前调度状态
    */
   jobState: CronjobState;
 
