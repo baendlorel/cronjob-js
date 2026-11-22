@@ -1,14 +1,18 @@
 # krontab
 
+<div align="center"  style="margin:0 auto">
+  <img src="./assets/icon.svg" alt="krontab" width="200" height="200" />
+</div>
+
 English | [简体中文](README.zh.md)
 
 A minimal, JS-native crontab.
 
-Drop a script in a directory, write a 5-field cron expression in its header comment, and the runner will spawn it when the expression matches — once per minute, nothing more.
+Drop a script into a directory and write a 5-field cron expression in its header comment — krontab runs the script when the time comes.
 
-No retries, no catch-up runs, no overlap protection, no process supervision. If a job ran or not, read the log.
+The name is `crontab` with a `K` — both "kron" (time) and the author's initial. The package still exports one function, `cronjob()`.
 
-The name is a nod to `crontab` with a `K` — meaning both "kron" (time) and the author's initial. The package still exports one function, `cronjob()`; if you are upgrading from `cronjob-js`, the only changes are the package name, the import specifier, and the lock name (see [Permissions](#permissions)).
+Beyond usage, also read [Design limits](#design-limits).
 
 ## Install
 
@@ -172,12 +176,12 @@ The runner logs an error and skips that line — it will not silently reinterpre
 
 ## Supported script types
 
-| Extension        | Interpreter                                            |
-| ---------------- | ------------------------------------------------------ |
-| `.js` / `.mjs` / `.cjs` | the current Node.js (`process.execPath`)        |
+| Extension               | Interpreter                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `.js` / `.mjs` / `.cjs` | the current Node.js (`process.execPath`)               |
 | `.ts` / `.mts` / `.cts` | `tsx` → `ts-node` → Node.js with native type stripping |
-| `.sh`            | `bash`, falling back to `sh`                           |
-| `.py`            | `python3` → `python` (only if added to `include`)      |
+| `.sh`                   | `bash`, falling back to `sh`                           |
+| `.py`                   | `python3` → `python` (only if added to `include`)      |
 
 `.mjs` / `.cjs` / `.mts` / `.cts` are only picked up if you add them to `include` (the default glob is `**/*.{ts,js,sh}`); their header comments use the same `//` and `/** */` rules as `.js` / `.ts`.
 
@@ -244,26 +248,21 @@ The lock name is derived from `dir`, so it is predictable; any local process tha
 
 ### `UserCronjobConfig`
 
-| Option     | Type                                       | Default                                                          | Description                                                                                                                                                       |
-| ---------- | ------------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`      | `string`                                   | `process.cwd()`                                                  | Directory scanned for job scripts. Created if missing.                                                                                                            |
-| `logDir`   | `string`                                   | same as `dir`                                                    | Where per-job logs are written. Created if missing.                                                                                                               |
-| `include`  | `string[]`                                 | `['**/*.{ts,js,sh}']`                                            | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python.                                                                           |
-| `exclude`  | `string[]`                                 | see below                                                        | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
-| `timezone` | `string`                                   | `'Asia/Shanghai'`                                                | IANA timezone used for cron matching and for the `timeFormat` timestamps. See [Daylight saving time](#daylight-saving-time).                                     |
-| `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                                                    | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
-| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)`                                | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
+| Option     | Type                                       | Default                           | Description                                                                                                                                                       |
+| ---------- | ------------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`      | `string`                                   | `process.cwd()`                   | Directory scanned for job scripts. Created if missing.                                                                                                            |
+| `logDir`   | `string`                                   | same as `dir`                     | Where per-job logs are written. Created if missing.                                                                                                               |
+| `include`  | `string[]`                                 | `['**/*.{ts,js,sh}']`             | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python.                                                                           |
+| `exclude`  | `string[]`                                 | see below                         | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
+| `timezone` | `string`                                   | `'Asia/Shanghai'`                 | IANA timezone used for cron matching and for the `timeFormat` timestamps. See [Daylight saving time](#daylight-saving-time).                                      |
+| `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                     | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
+| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)` | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
 
 Invalid config throws a `TypeError` naming the option (`dir`, `logDir`, `include`, …); an unknown `timezone` throws a `RangeError` from `Intl.DateTimeFormat`.
 
 #### Daylight saving time
 
-Matching uses the wall clock in `timezone`. In a DST zone that means:
-
-- The repeated hour after a fall-back runs matching jobs **twice** (for example `30 1 * * *` in `America/New_York` on 2026-11-01, at both 01:30 EDT and 01:30 EST).
-- The missing hour after a spring-forward runs them **not at all** (for example `30 2 * * *` on 2026-03-08 in `America/New_York`).
-
-This is the opposite of vixie/Debian `cron`, whose man page says jobs skipped by a forward jump "will be run soon after the change" and jobs in the repeated hour "will not be re-run". If exact DST behaviour matters, schedule in a zone without DST (UTC is the obvious choice). The default `Asia/Shanghai` has no DST.
+Matching is done purely against the expression, so if you hit a clock jump, switch that schedule to `@cronutc`.
 
 #### Default `exclude`
 
@@ -315,15 +314,15 @@ At startup the runner also warns about a missing `tsx` (only matters for `.ts`) 
 
 These are deliberate, not missing features:
 
-- **No retries.** A failed job stays failed until its next scheduled run.
-- **No catch-up.** If the machine was down at 03:00, the 03:00 job does not run when it comes back.
-- **No overlap protection.** A long job will overlap with its next run.
-- **No process management.** Jobs are detached; the runner does not watch or kill them.
-- **No exit-code alerts.** Non-zero exits are logged; read the job log if you care.
-- **No job lifecycle hooks.** There is no callback for "job started" or "job finished"; the log lines are the only signal.
+- **No retries.** There is no way to know whether the failure happened before or after a side effect, so noticing a failure is the job author's responsibility.
+- **No catch-up.** If the machine was down at 03:00, the 03:00 job does not run when it comes back — the time simply never arrived.
+- **Overlap happens.** A long job will overlap with its next run.
+- **No process management.** krontab does not watch or kill jobs.
+- **No exit-code alerts.** Every exit is logged; read the log if you care.
+- **No job lifecycle hooks.** There is no callback for "job started" or "job finished"; a minimal scheduler should not have them.
 - **The timer is minute-aligned, not second-aligned.** If the process is busy or the host is suspended across a boundary, the tick happens when the event loop gets to it, and there is no catch-up for the missed minute.
 
-The runner itself is kept alive by pm2. If the runner dies, nothing runs until pm2 restarts it.
+krontab itself is best kept alive by pm2. If the runner dies, nothing runs until pm2 restarts it.
 
 Run it in pm2 **fork mode** (the default). With `-i` (cluster mode) every worker shares one task directory; the single-instance lock lets only the first worker schedule, and the others exit with `krontab already running` and are restarted by pm2 in a loop.
 
