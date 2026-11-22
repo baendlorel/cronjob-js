@@ -3,9 +3,10 @@
  * # 1. 只支持：【分 时 日 月 周】 的写法
  * # 2. cron表达式必须写在每个ts、js脚本的第一行或第二行，以注释给出
  */
+import type { UserCronjobConfig } from './types/config.js';
 import { performance } from 'node:perf_hooks';
 
-import { type UserCronjobConfig, createContext } from './config.js';
+import { createContext } from './config.js';
 import { CronjobState } from './consts.js';
 import { tryGlobSync } from './utils.js';
 import { runTask, type TaskController } from './cron/task.js';
@@ -14,7 +15,6 @@ import { run } from './run.js';
 import { initialize } from './initialize.js';
 import { list } from './list.js';
 
-export type { UserCronjobConfig } from './config.js';
 export type { TaskController } from './cron/task.js';
 
 /**

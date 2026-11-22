@@ -42,3 +42,12 @@ export interface JobItem extends JobBase {
 export interface Job extends JobBase {
   count: number;
 }
+
+export interface CronjobLogger {
+  info: (...args: any[]) => any;
+  err: (...args: any[]) => any;
+  warn: (...args: any[]) => any;
+  spawn: (...args: any[]) => any;
+  exit: (...args: any[]) => any;
+  debug: (...args: any[]) => any;
+}

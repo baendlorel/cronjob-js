@@ -1,5 +1,5 @@
 import type { CronjobContext } from '../src/config.js';
-import type { Job } from '../src/types/job.js';
+import type { Job } from '../src/types/global.js';
 
 import { EventEmitter } from 'node:events';
 import { existsSync, fstatSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';

@@ -1,4 +1,4 @@
-import type { CronjobContext } from './config.js';
+import type { CronjobContext } from './types/config.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';

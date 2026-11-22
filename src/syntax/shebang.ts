@@ -1,4 +1,4 @@
-import type { Interpreter } from '../types/job.js';
+import type { Interpreter } from '../types/global.js';
 
 const parse = (text: string): Interpreter | null => {
   const [cmd, ...args] = text.split(/\s+/).filter(Boolean);

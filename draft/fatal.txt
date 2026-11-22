@@ -249,6 +249,7 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 173/173 均通过；下面的
    list.ts 残留未使用的 realpathSync / pathToFileURL / createContext；
    initialize.ts 的 lock 只写不读（这是有意持有引用，可改名为 _lock）。剩 4 条 oxlint warning。
    （第六轮审查后 extract.ts 的 kStringMaxLength 已删。）
+——你可以清理
 
 🟡 F42 example/main.js 用 node 跑不起来
    它 import '../src/index.js'，而仓库里只有 index.ts：

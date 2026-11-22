@@ -1,4 +1,4 @@
-import type { Interpreter } from './types/job.js';
+import type { Interpreter } from './types/global.js';
 import { spawnSync } from 'node:child_process';
 
 /**

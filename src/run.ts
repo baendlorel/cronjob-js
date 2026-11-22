@@ -1,4 +1,4 @@
-import type { Job } from './types/job.js';
+import type { Job } from './types/global.js';
 import type { CronjobContext } from './config.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';

@@ -1,4 +1,4 @@
-import type { CronGroupItem } from '../src/types/job.js';
+import type { CronGroupItem } from '../src/types/global.js';
 
 import { describe, expect, it } from 'vitest';
 

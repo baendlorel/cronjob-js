@@ -1,6 +1,6 @@
-import type { CronGroupItem, JobItem } from '../types/job.js';
 import type { CronExpression } from 'cron-parser';
-import type { CronjobContext } from '../config.js';
+import type { CronGroupItem, JobItem } from '../types/global.js';
+import type { CronjobContext } from '../types/config.js';
 
 import { extname, relative } from 'node:path';
 import { type CronBlockMaker, Marker } from '../consts.js';

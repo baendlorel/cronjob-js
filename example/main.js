@@ -1,4 +1,4 @@
-import { cronjob } from '../src/index.js';
+import { cronjob } from '../dist/index.js';
 
 async function main() {
   const task = await cronjob();

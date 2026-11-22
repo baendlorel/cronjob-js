@@ -1,4 +1,4 @@
-import type { Job, JobItem } from '../types/job.js';
+import type { Job, JobItem } from '../types/global.js';
 import type { CronjobContext } from '../config.js';
 
 import path from 'node:path';
