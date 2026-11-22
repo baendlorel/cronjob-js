@@ -1,5 +1,5 @@
 cronjob-runner 问题清单
-最后更新：2026-11-22（第六轮审查，F23–F28 已修复，F29 判定不修）
+最后更新：2026-11-22（第六轮审查，F23–F31 已处理，F29 判定不修）
 检查版本：main @ a98809a + 本轮改动（未提交）
 运行环境：Node v26.13.1 / WSL2
 
@@ -137,31 +137,32 @@ cronjob-runner 问题清单
    确实会再命中一次；但这只在 NTP 把偏快的钟拨回来时发生，且与 F39 的夏令时重复一致。
    结论：接受为已知行为，不改代码。
 
+🟡✅ F30 dir 里有 FIFO 或卡住的挂载时，runner 会静默停摆
+   readFile 打开 FIFO 会一直阻塞，占住 libuv 线程池（默认 4 个）；连续 4 轮后连无关的 fs.readFile 也挂起。
+   修复：loadFiles 先 stat，非普通文件（FIFO / 设备 / 目录）跳过并记 WARN，不做 readFile。
+   实测：4 个 FIFO + real.js，单轮 17ms 结束，4 条 WARN，real.js 照常命中，无关 readFile 正常。
+   nolater（utils.ts）没采用：race 只让 await 提前返回，底层线程仍在 FIFO 上阻塞，
+   实测 8 个 FIFO 全部 race 超时后线程池依旧被占满。
+   遗留：挂起的网络盘（stat 也会卡）没有解法，触发时线程池同样会被耗光。
+
+🟡✅ F31 每轮都把整个文件读进内存，实际只需要文件头
+   修复：stat 已经拿到 size —— <= 64KB 直接 readFile，> 64KB 只定位读前 64KB（header.ts）。
+   实测 214MB 的 .js：单轮 346ms / RSS +321MB → 8ms / RSS +1MB，content 恰好 65536 字节，表达式仍能识别。
+   2000 个 4KB 小文件的 loadFiles：304ms（逐块循环）→ 65ms（stat + readFile）。
+   前 64KB 全是注释才记 WARN（普通大文件不会每分钟刷一条）。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ a98809a + 本轮修补（F23–F28 已转入上方已修复区）
+检查版本：main @ a98809a + 本轮修补（F23–F31 已转入上方已修复区；F29 判定不修）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 166/166 均通过；下面的问题现有测试都没有覆盖。
+tsc、oxlint（4 条 warning，见 F41）、vitest 168/168 均通过；下面的问题现有测试都没有覆盖。
 
 🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 / 🟠✅ F26 / 🟠✅ F27 / 🟠✅ F28 → 已修复，见上方。
 🟡✅ F29 → 不修，与 vixie cron 行为一致，见上方。
-
-🟡 F30 dir 里有 FIFO 或卡住的挂载时，runner 会静默停摆（触发少见，后果是所有任务停跑）
-   readFile 打开 FIFO 会一直阻塞，占住 libuv 线程池里的一个线程（默认 4 个）。
-   实测：1 个 FIFO 加 1 个正常的 real.js，这一轮的 Promise.all 永远不结束，real.js 也不会 spawn；
-   连续 4 轮之后，与本项目无关的 fs.readFile('/etc/hostname') 也挂起。
-   主日志只有 [DEBUG] Start，没有 Finished 也没有 Error。process.exit 同样卡住，只能靠外部 kill。
-   修复：glob 之后只保留普通文件（stat().isFile() 不会在 FIFO 上阻塞）。
-        挂起的网络盘没有完整解法，可以在文档里提一句。
-   ——我在utils.ts里写了nolater。你看看能否用在这里，给每个文件加一个，这样防止等太久
-
-🟡 F31 每轮都把整个文件读进内存，实际只需要文件头
-   一个 214MB 的 .js：单轮耗时 346ms，RSS +321MB，每分钟重复一次。
-   修复：只读前若干 KB（如 64KB），或读到第一行正式代码为止。
-   ——你先说说这个函数怎么写我再决定
+🟡✅ F30 / 🟡✅ F31 → 已修复，见上方。
 
 🟡 F32 默认 exclude 只排除了顶层 node_modules
    'node_modules/' 只匹配 dir 根下那一层，sub/node_modules/** 照样被 glob，每分钟读一遍。

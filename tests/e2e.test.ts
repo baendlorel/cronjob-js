@@ -32,15 +32,16 @@ const waitFor = async (predicate: () => boolean, timeout = 10_000) => {
   }
 };
 
+/** 推进虚拟时间触发 tick 后，跑掉本轮的真实 I/O（stat / open / read），并保持在真实定时器上 */
 const tickAndSettle = async (minutes = 1) => {
   await vi.advanceTimersByTimeAsync(minutes * 60_000);
 };
 
 /**
  * tick 里的 stat / open 是真实异步 I/O，虚拟定时器推不动。
- * 断言前切回真实定时器等 I/O 落地，再切回来保持后续 tick 可控。
+ * 切回真实定时器等 I/O 落地；之后的断言/waitFor 都在真实定时器下进行。
  */
-const flushIo = async (ms = 20) => {
+const settleIo = async (ms = 20) => {
   vi.useRealTimers();
   await new Promise((resolve) => setTimeout(resolve, ms));
   vi.useFakeTimers();
@@ -66,7 +67,7 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     const jobLog = path.join(dir, 'hello.sh.log');
     await waitFor(() => existsSync(jobLog) && readFileSync(jobLog, 'utf8').includes('hit'));
@@ -91,7 +92,7 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     expect(logsOf(logs).join('\n')).not.toContain('[SPAWN]');
   });
@@ -106,7 +107,7 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     await waitFor(() => readFileSyncIfExists(path.join(dir, 'twice.sh.log')).split('\n').filter(Boolean).length >= 2);
     // 两个 [SPAWN] 是同步打的，日志先于子进程退出，必定已经到达
@@ -127,7 +128,7 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     await waitFor(() => readFileSyncIfExists(path.join(dir, 'once.sh.log')).includes('once'));
     expect(logs.filter((l) => l.tag === Tag.Spawn)).toHaveLength(1);
@@ -141,7 +142,7 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     const text = logsOf(logs).join('\n');
     expect(text).toContain('[INFO] No scripts found.');
@@ -162,7 +163,7 @@ describe('cronjob — 端到端', () => {
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     // .rb 没有 allowFn，整段头部都被视为正式代码，于是提取不到表达式
     expect(logs.filter((l) => l.tag === Tag.Spawn)).toEqual([]);
@@ -179,11 +180,11 @@ describe('cronjob — 端到端', () => {
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
     await tickAndSettle();
-    await flushIo();
+    await settleIo();
     await tickAndSettle();
     task.stop();
     vi.useRealTimers();
-    await flushIo();
+    await settleIo();
 
     const errors = logs.filter((l) => l.tag === Tag.Error);
     expect(errors.length).toBeGreaterThanOrEqual(1);
@@ -197,18 +198,17 @@ describe('cronjob — 端到端', () => {
     const logs: Array<{ tag: string; args: any[] }> = [];
     const task = await cronjob({ dir, write: (tag, ...args) => logs.push({ tag, args }) });
 
+    // 暂停期间 tick 照常到点但不执行（F28）：只要时间在推进，就不会有任何 SPAWN
     task.pause();
-    await tickAndSettle();
-    await flushIo();
-    await tickAndSettle();
-    await flushIo();
+    await tickAndSettle(2);
     expect(logs.filter((l) => l.tag === Tag.Spawn)).toHaveLength(0);
 
     task.resume();
     await tickAndSettle();
-    task.stop();
+    // 恢复后的这一轮里有真实 I/O：在真实定时器下等它落地，再 stop / 断言
     vi.useRealTimers();
-    await flushIo();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    task.stop();
 
     await waitFor(() => readFileSyncIfExists(path.join(dir, 'p.sh.log')).includes('p'));
     expect(logs.filter((l) => l.tag === Tag.Spawn).length).toBeGreaterThanOrEqual(1);

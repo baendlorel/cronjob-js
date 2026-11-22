@@ -1,46 +1,39 @@
 import type { CronjobContext } from '../config.js';
 
-import { open } from 'node:fs/promises';
+import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-/** 每次最多读 16KB；正常文件头就几行，一次就够 */
-const BLOCK = 16 * 1024;
-/** 文件头最多 64KB，防止整文件都是注释时无限读下去 */
-const MAX_HEADER = 64 * 1024;
+/** 文件头最多读 64KB；比这小的文件由调用方直接整读 */
+export const MAX_HEADER = 64 * 1024;
 
 /**
- * 只读文件头：逐块读，遇到第一行正式代码（`allowLine` 返回 false）就停。
- * - 不整读大文件：214MB 的脚本也只读第一块
- * - 文件头超过 MAX_HEADER 时截断并记 WARN
+ * 只读大文件的前 MAX_HEADER 字节，一次定位读，不循环。
+ * - 读出来的内容可能带上一行正式代码或半行，没关系：getJobItem 会在第一行正式代码处切掉
+ * - 只有前 64KB 全是注释（说明文件头真的超长）才记 WARN，避免每个大文件每分钟刷一条
  */
 export async function readHeader(
   cx: CronjobContext,
   filepath: string,
   allowLine: (line: string) => boolean,
-): Promise<string> {
+): Promise<string | null> {
+  const s = await stat(filepath);
+  if (!s.isFile()) {
+    cx.log.warn(`Skipped non-regular file: ${path.relative(cx.dir, filepath)}`);
+    return null;
+  }
+  if (s.size < MAX_HEADER) {
+    return await readFile(filepath, 'utf8');
+  }
+
   const fh = await open(filepath, 'r');
   try {
-    const chunks: string[] = [];
-    let rest = '';
-    for (let offset = 0; offset < MAX_HEADER; offset += BLOCK) {
-      const buf = Buffer.alloc(BLOCK);
-      const { bytesRead } = await fh.read(buf, 0, BLOCK, offset);
-      if (bytesRead === 0) {
-        return chunks.join('');
-      }
-      const chunk = buf.subarray(0, bytesRead).toString('utf8');
-      chunks.push(chunk);
-
-      // 最后一段可能是半行，留到下一块再判断
-      const lines = (rest + chunk).split('\n');
-      rest = lines.pop() ?? '';
-      if (lines.some((line) => !allowLine(line.trim())) || !allowLine(rest.trim())) {
-        return chunks.join('');
-      }
+    const buf = Buffer.alloc(MAX_HEADER);
+    const { bytesRead } = await fh.read(buf, 0, MAX_HEADER, 0);
+    const text = buf.subarray(0, bytesRead).toString('utf8');
+    if (bytesRead === MAX_HEADER && text.split('\n').every((line) => allowLine(line.trim()))) {
+      cx.log.warn(`Header longer than ${MAX_HEADER} bytes, truncated: ${path.relative(cx.dir, filepath)}`);
     }
-
-    cx.log.warn(`Header longer than ${MAX_HEADER} bytes, truncated: ${path.relative(cx.dir, filepath)}`);
-    return chunks.join('');
+    return text;
   } finally {
     await fh.close();
   }

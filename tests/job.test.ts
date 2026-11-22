@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { parseExp } from '../src/cron/parse.js';
 import { getMatchedJob, getJobs, loadFiles } from '../src/syntax/job.js';
+import { MAX_HEADER } from '../src/syntax/header.js';
 import { createTestContext, parseLines } from './helpers.js';
 
 const { cx } = createTestContext({ timezone: 'Asia/Shanghai', dir: '/virtual/dir' });
@@ -116,7 +117,7 @@ describe('getJobs — 文件级组合', () => {
       SAT_9,
     );
     expect(jobs.map((j) => j.filepath)).toEqual(['/virtual/dir/ok.js']);
-    expect(logs.some((l) => String(l.args[0]).includes('Error loading file /virtual/dir/gone.js'))).toBe(true);
+    expect(logs.some((l) => String(l.args[0]).includes('Error loading file gone.js'))).toBe(true);
   });
 });
 
@@ -149,6 +150,42 @@ describe('loadFiles', () => {
 
     const result = await loadFiles(cx, paths);
     expect(result.map((r) => r.content)).toEqual(paths.map((_, i) => String(i)));
+  });
+
+  it('跳过 FIFO 等非普通文件，不会把线程池卡住（F30）', async () => {
+    const { mkdtemp, writeFile } = await import('node:fs/promises');
+    const { execFileSync } = await import('node:child_process');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+
+    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-fifo-'));
+    const fifo = path.join(dir, 'pipe.js');
+    const okPath = path.join(dir, 'real.js');
+    execFileSync('mkfifo', [fifo]);
+    await writeFile(okPath, '// @cron * * * * *\n', 'utf8');
+
+    const { cx: local, logs } = createTestContext({ dir });
+
+    // 有 FIFO 在场时，整轮必须能结束；旧实现会在这里永久挂起
+    const result = await loadFiles(local, [fifo, okPath]);
+    expect(result.map((r) => r.content)).toEqual([null, '// @cron * * * * *\n']);
+    expect(logs.some((l) => String(l.args[0]).includes('Skipped non-regular file: pipe.js'))).toBe(true);
+  });
+
+  it('超过 MAX_HEADER 的大文件只读前 64KB（F31）', async () => {
+    const { mkdtemp, writeFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+
+    const dir = await mkdtemp(path.join(tmpdir(), 'cronjob-js-big-'));
+    const bigPath = path.join(dir, 'bundle.js');
+    const body = `console.log("${'x'.repeat(90)}");\n`.repeat(5000);
+    await writeFile(bigPath, `// @cron * * * * *\n${body}`, 'utf8');
+
+    const [file] = await loadFiles(cx, [bigPath]);
+    expect(file.content!.length).toBe(MAX_HEADER);
+    // 头部仍能正常解析出表达式
+    expect(getJobs(cx, [file], SAT_9).map((j) => j.filepath)).toEqual([bigPath]);
   });
 });
 

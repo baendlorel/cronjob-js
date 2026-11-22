@@ -1,7 +1,6 @@
 import type { Job, JobItem } from '../types/job.js';
 import type { CronjobContext } from '../config.js';
 
-import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { getJobItem } from './extract.js';
@@ -34,12 +33,8 @@ export async function loadFiles(cx: CronjobContext, filepaths: string[]): Promis
     const promises = filepaths.slice(i, i + CHUNK_SIZE).map(async (filepath): Promise<FileContent> => {
       const relativePath = path.relative(cx.dir, filepath);
       try {
-        const s = await stat(filepath);
-        if (!s.isFile()) {
-          cx.log.warn(`Skipped non-regular file: ${relativePath}`);
-          return { filepath, content: null, error: new Error('not a regular file') };
-        }
-        const content = await readHeader(cx, filepath, getAllowFn(path.extname(filepath)));
+        const allower = getAllowFn(path.extname(filepath));
+        const content = await readHeader(cx, filepath, allower);
         return { filepath, content, error: null };
       } catch (error) {
         return { filepath, content: null, error };
