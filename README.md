@@ -155,12 +155,14 @@ The runner logs an error and skips that line — it will not silently reinterpre
 
 ## Supported script types
 
-| Extension | Interpreter                                            |
-| --------- | ------------------------------------------------------ |
-| `.js`     | the current Node.js (`process.execPath`)               |
-| `.ts`     | `tsx` → `ts-node` → Node.js with native type stripping |
-| `.sh`     | `bash`, falling back to `sh`                           |
-| `.py`     | `python3` → `python` (only if added to `include`)      |
+| Extension        | Interpreter                                            |
+| ---------------- | ------------------------------------------------------ |
+| `.js` / `.mjs` / `.cjs` | the current Node.js (`process.execPath`)        |
+| `.ts` / `.mts` / `.cts` | `tsx` → `ts-node` → Node.js with native type stripping |
+| `.sh`            | `bash`, falling back to `sh`                           |
+| `.py`            | `python3` → `python` (only if added to `include`)      |
+
+`.mjs` / `.cjs` / `.mts` / `.cts` are only picked up if you add them to `include` (the default glob is `**/*.{ts,js,sh}`); their header comments use the same `//` and `/** */` rules as `.js` / `.ts`.
 
 Extensions with no interpreter mapping are only reached if a script is extracted with one; in practice an unknown extension has no comment syntax for its header, so no `@cron` line is found and nothing is spawned. Such a job would log `[WARN] path=… unsupported extension` if it ever got that far.
 

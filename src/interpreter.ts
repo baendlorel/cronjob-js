@@ -21,15 +21,15 @@ export const CMD_NONE = 'none';
 
 const tsCmd = detectCommand('tsx') ?? detectCommand('ts-node') ?? process.execPath;
 
+const jsLike = (cmd: string): Interpreter => ({ cmd, args: [] });
+
 const interpreters: Record<string, Interpreter> = {
-  '.ts': {
-    cmd: tsCmd,
-    args: [],
-  },
-  '.js': {
-    cmd: process.execPath,
-    args: [],
-  },
+  '.ts': jsLike(tsCmd),
+  '.mts': jsLike(tsCmd),
+  '.cts': jsLike(tsCmd),
+  '.js': jsLike(process.execPath),
+  '.mjs': jsLike(process.execPath),
+  '.cjs': jsLike(process.execPath),
   '.py': {
     cmd: detectCommand('python3') || detectCommand('python') || CMD_NONE,
     args: [],

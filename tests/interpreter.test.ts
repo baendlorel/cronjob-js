@@ -19,6 +19,13 @@ describe('getDefaultInterpreter', () => {
     expect(args).toEqual([]);
   });
 
+  it('.mjs / .cjs 与 .js 一致，.mts / .cts 与 .ts 一致（F35）', () => {
+    expect(getDefaultInterpreter('.mjs')).toEqual(getDefaultInterpreter('.js'));
+    expect(getDefaultInterpreter('.cjs')).toEqual(getDefaultInterpreter('.js'));
+    expect(getDefaultInterpreter('.mts')).toEqual(getDefaultInterpreter('.ts'));
+    expect(getDefaultInterpreter('.cts')).toEqual(getDefaultInterpreter('.ts'));
+  });
+
   it('.sh 走 bash 或 sh', () => {
     expect(['bash', 'sh']).toContain(getDefaultInterpreter('.sh').cmd);
   });

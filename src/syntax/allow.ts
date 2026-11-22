@@ -12,7 +12,11 @@ const jstsAllow = (line) =>
 
 const allows = {
   '.ts': jstsAllow,
+  '.mts': jstsAllow,
+  '.cts': jstsAllow,
   '.js': jstsAllow,
+  '.mjs': jstsAllow,
+  '.cjs': jstsAllow,
   '.py': (line: string) => /^(#|'''|""")/.test(line) || line.length === 0,
   '.sh': (line: string) => line.startsWith('#') || line.length === 0,
 };

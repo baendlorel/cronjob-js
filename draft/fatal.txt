@@ -1,5 +1,5 @@
 cronjob-runner 问题清单
-最后更新：2026-11-22（第六轮审查，F23–F33 已处理，F29 判定不修）
+最后更新：2026-11-22（第六轮审查，F23–F35 已处理，F29 判定不修）
 检查版本：main @ a98809a + 本轮改动（未提交）
 运行环境：Node v26.13.1 / WSL2
 
@@ -166,32 +166,29 @@ cronjob-runner 问题清单
    error:null，getJobs 又当读取失败记了 "[ERROR] ... : null"。现在"跳过"和"读取失败"分开判断。
    行为变化：stop() 之后再落地的 tick 不再 spawn（之前会），文档与测试已同步。
 
+🟡✅ F34 python 缺失时的提示永远不会出现
+   CMD_NONE = 'none' 是真值，`if (pythonCmd)` 恒成立。
+   修复：改为 pythonCmd !== CMD_NONE。PATH 里去掉 python 后实测输出
+   `[WARN] python not available, .py jobs will be ignored`；有 python 时仍是 INFO。
+   附带发现的启动阻塞已单列为 F43。
+
+🟡✅ F35 .mjs / .cjs / .mts / .cts 加进 include 后永远不会被调度，且没有任何日志
+   修复：allow.ts 把四个扩展映射到 jstsAllow；interpreter.ts 把 .mjs/.cjs 映射到 node、
+   .mts/.cts 映射到与 .ts 相同的 tsx → ts-node → node 链。README 的扩展名表同步更新。
+   实测 include: ['**/*.{mjs,cjs,mts,cts}']：a.mjs/b.cjs 用 node，c.mts/d.cts 用 tsx，各 count=1。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ 3aedf9e + 本轮修补（F23–F33 已转入上方已修复区；F29 判定不修）
+检查版本：main @ 3aedf9e + 本轮修补（F23–F35 已转入上方已修复区；F29 判定不修）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 169/169 均通过；下面的问题现有测试都没有覆盖。
+tsc、oxlint（4 条 warning，见 F41）、vitest 171/171 均通过；下面的问题现有测试都没有覆盖。
 
 🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 / 🟠✅ F26 / 🟠✅ F27 / 🟠✅ F28 → 已修复，见上方。
 🟡✅ F29 → 不修，与 vixie cron 行为一致，见上方。
-🟡✅ F30 / 🟡✅ F31 / 🟡✅ F32 / 🟡✅ F33 → 已修复，见上方。
-
-🟡 F34 python 缺失时的提示永远不会出现（与 F16 同类）
-   CMD_NONE = 'none' 是真值，`if (pythonCmd)` 恒成立。从 PATH 去掉 python 后实际输出：
-   "[INFO] python available, .py files will be run by none"。
-   修复：改为判断 pythonCmd !== CMD_NONE。
-   附带：interpreter.ts 在模块顶层同步 spawnSync，最多 5 次探测（每次超时 3s）。
-        任何 import 本包的进程（包括 --list）都要先阻塞约 250–330ms，最坏约 15s。可以挪进 initialize。
-
-🟡 F35 .mjs / .cjs / .mts / .cts 加进 include 后也永远不会被调度，且没有任何日志
-   getAllowFn 对未知扩展名返回 () => false，文件头为空，一条 @cron 都读不到。
-   实测 include: ['**/*.mjs'] 时，a.mjs、a.cjs、a.mts 都是 0 个任务、0 条日志；
-   首行写了 #!/usr/bin/env node 的 b.mjs 也一样。
-   这与 README 的 "If a .ts file has a #! line … Same for any other extension" 不符。
-   修复：把这四个扩展名映射到 jstsAllow 和对应的解释器，或者在 README 的 include 说明里写清楚。
+🟡✅ F30 / 🟡✅ F31 / 🟡✅ F32 / 🟡✅ F33 / 🟡✅ F34 / 🟡✅ F35 → 已修复，见上方。
 
 🟡 F36 不带 * 前缀的 /* */ 块注释不算文件头
    /*
@@ -200,6 +197,7 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 169/169 均通过；下面的
    第二行不以 // /* * */ 开头，被当成第一行正式代码，结果是 0 条 cron，也没有日志。
    CLAUDE.md 和 README 只写了 /** */ 的写法，纯 /* */ 写法会静默失效。
    修复：getJobItem 里跟踪块注释状态，或者在文档里写明块内每行必须以 * 开头。
+TODO: 这里改为不允许出现除了@cron以外其他的字符串。
 
 🟡 F37 说明文字里提到 @cronbegin / @cronend 时，整个文件都不调度
    "// 每天九点备份，不需要 @cronbegin 块" 加上 "// @cron 0 9 * * *"：
@@ -244,6 +242,13 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 169/169 均通过；下面的
    node example/main.js --list 报 ERR_MODULE_NOT_FOUND，只能用 tsx 跑。
    文件末尾注释里的 pm2 start cronjob-runner/main.js 也会因此失败（pm2 默认用 node）。
    修复：改成 import 'cronjob-js'，或者在注释里写明用 tsx（pm2 --interpreter tsx）。
+
+🟡 F43 interpreter.ts 在模块顶层同步探测运行时，拖慢所有 import
+   tsCmd / python / bash 一共最多 5 次 spawnSync（每次 timeout 3s），在模块加载时同步执行。
+   实测 import src/index 需 250–330ms；PATH 里有卡住的命令时最坏约 15s。
+   任何 import 本包的进程（包括 --list、测试）都要先付这笔钱，且发生在单例锁之前。
+   修复：改成惰性探测（首次用到时再探测），或挪进 initialize 并在 cx 上缓存。
+   注意：hasTsx / pythonCmd 目前是模块级常量，initialize 与测试都直接读它们，改的时候要一起动。
 
 ── 已排查、未发现问题 ──
    #!/usr/bin/env -S node --no-warnings 拆成 cmd + args 后能正常运行。

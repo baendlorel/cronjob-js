@@ -106,6 +106,7 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
       '**/.claude/',
       '**/__pycache__/',
       '**/dist/',
+      '**/dist-tsc/',
       '**/coverage/',
     ],
     timezone = 'Asia/Shanghai',

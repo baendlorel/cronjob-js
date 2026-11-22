@@ -28,6 +28,13 @@ describe('getAllowFn', () => {
       expect(getAllowFn('.ts')('// ok')).toBe(true);
       expect(getAllowFn('.ts')('let x: number')).toBe(false);
     });
+
+    it('shares the same rules for .mjs / .cjs / .mts / .cts (F35)', () => {
+      for (const ext of ['.mjs', '.cjs', '.mts', '.cts']) {
+        expect(getAllowFn(ext)('// ok')).toBe(true);
+        expect(getAllowFn(ext)('const x = 1')).toBe(false);
+      }
+    });
   });
 
   describe('.sh', () => {

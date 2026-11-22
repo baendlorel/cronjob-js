@@ -4,7 +4,7 @@ import { mkdirSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import net from 'node:net';
 
-import { pythonCmd, hasTsx } from './interpreter.js';
+import { CMD_NONE, pythonCmd, hasTsx } from './interpreter.js';
 
 /** 持有引用，防止 unref 后的 server 被 GC，导致锁被提前释放 */
 let lock: net.Server | null = null;
@@ -19,7 +19,7 @@ const orTsx = (cx: CronjobContext) => {
 };
 
 const orPython = (cx: CronjobContext) => {
-  if (pythonCmd) {
+  if (pythonCmd !== CMD_NONE) {
     cx.log.info(`python available, .py files will be run by ${pythonCmd}`);
   } else {
     cx.log.warn('python not available, .py jobs will be ignored');
