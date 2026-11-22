@@ -1,4 +1,8 @@
 # krontab
+<div align="center">
+  <img src="./assets/icon.svg" alt="krontab" width="200" height="200" />
+</div>
+
 
 [English](README.md) | 简体中文
 

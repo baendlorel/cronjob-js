@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" fill="none">
+  <title>krontab</title>
+  <path d="M38 10.83A22 22 0 1 0 53.17 26" stroke="#171B22" stroke-width="4" stroke-linecap="round" />
+  <path d="M25 21V43M40 21L25 32L40 43" stroke="#171B22" stroke-width="4.5" stroke-linecap="round"
+    stroke-linejoin="round" />
+  <circle cx="48.5" cy="17.5" r="3" fill="#FF784F" />
+</svg>
