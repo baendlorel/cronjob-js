@@ -4,9 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 import { Tag } from '../src/consts.js';
 import { parseExp } from '../src/cron/parse.js';
+import { loadRuntime } from '../src/interpreter.js';
 import { getMatchedJob, getJobs, loadFiles } from '../src/syntax/job.js';
 import { MAX_HEADER } from '../src/syntax/header.js';
 import { createTestContext, parseLines } from './helpers.js';
+
+// getDefaultInterpreter 依赖 cronjob() 启动时探测的结果，测试里手动走一遍
+loadRuntime();
 
 const { cx } = createTestContext({ timezone: 'Asia/Shanghai', dir: '/virtual/dir' });
 

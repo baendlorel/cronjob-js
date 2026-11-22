@@ -273,24 +273,33 @@ cronjob-runner 问题清单
    实测：两种语序都是 0 条表达式 + 1 条 [ERROR]，不会再一边跑一边展示成 UTC。
    回归用例 tests/extract.test.ts「decides the timezone once and refuses lines with both markers (F45 / F46)」。
 
+🟡✅ F47 --list 显示的解释器是 none，与实际运行不符（F43 的回归）
+   --list 分支在 loadRuntime() 之前就 exit，getDefaultInterpreter 读到的是 fallback 映射，
+   fallback 里只有 .js/.mjs/.cjs，于是 a.ts → "none"、b.sh → "none"。
+   用户会以为 .ts/.sh 不被支持。上一轮回复里说"不影响输出正确性"是错的。
+   修复（两道）：
+   (a) cronjob() 把 loadRuntime() 提到 --list 分支之前，--list 也拿到真实命令；
+   (b) 删掉 fallback：getDefaultInterpreter 只从 loadRuntime() 填好的映射里取，
+       不再有那份只含 .js/.mjs/.cjs 的残缺表。调用方本来就是 cronjob()，
+       它的一定会先探测，所以不需要兜底（测试里手动调 loadRuntime() 走同一流程）。
+   实测：a.ts → "tsx a.ts"、c.js → "<node> c.js"、b.sh/d.sh → "bash a.sh"，没有 none。
+   回归用例 tests/list.test.ts「解释器列是探测后的真实命令，不是 none（F47）」。
+
+🟡✅ F48 pnpm check 不再检查 tests/，测试文件已有类型错误
+   check 脚本改成了 tsconfig.build.json（include 只有 src/**/*.ts），tests/ 不再参与类型检查。
+   实际错误：tests/helpers.ts、tests/run.test.ts 报 TS2459 —— CronjobContext 改从 types/config.ts
+   导出后，测试仍从 src/config.js 导入；vitest 只转译不做类型检查，所以被掩盖。
+   修复：check 改回 tsconfig.json（全仓库 **/*.ts），两处 import 改成 ../src/types/config.js。
+   实测：pnpm check 退出 0；vitest 179/179。
+
+🟡✅ F49 文档里残留的旧文案
+   README "A note on trailing words" 改为说明 6 个 token 会被当成 6 段表达式拒绝，
+   并写出实际错误文案 "6 fields cron is not supported, use 5 fields instead"。
+   src/index.ts 顶部注释改为"cron 表达式写在脚本的文件头注释区（第一条正式代码之前的注释）"。
+   types/config.ts 的 include 注释改为 `['**/*.{ts,js,sh}']`（注释里用 &#47; 写出，
+   避免 */ 提前结束块注释）；exclude 注释补上全部 8 个默认目录，并写明 exclude 是整体替换。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
-
-
-══ 待修复（第六轮审查）══════════════════════
-检查日期：2026-11-22
-检查版本：main @ d6a9210 + 本轮修补（F23–F43 已处理；F29、F36、F37 判定不修，F39 接受现状）
-运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（0 条 warning）、vitest 176/176 均通过。
-
-🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 / 🟠✅ F26 / 🟠✅ F27 / 🟠✅ F28 → 已修复，见上方。
-🟡✅ F29 → 不修，与 vixie cron 行为一致，见上方。
-🟡✅ F30 / 🟡✅ F31 / 🟡✅ F32 / 🟡✅ F33 / 🟡✅ F34 / 🟡✅ F35 → 已修复，见上方。
-🟡✅ F36 → 维持现状，`*` 前缀是通行写法，见上方。
-🟡✅ F37 → 不修，按"严格优先于宽松"的既定原则，见上方。
-🟡✅ F38 → 已修复，见上方。
-🟡✅ F39 → 接受现状（与 F29 同类），crontab 的对照行为已记录。
-🟡✅ F40 → 已修复（a 代码校验、b 文档说明），见上方。
-🟡✅ F41 / 🟡✅ F42 / 🟡✅ F43 → 已修复，见上方。
 
 ══ 待修复（第七轮审查）══════════════════════
 检查日期：2026-11-22
@@ -298,30 +307,7 @@ tsc、oxlint（0 条 warning）、vitest 176/176 均通过。
 运行环境：Node v26.13.1 / pm2 7.1.2 / WSL2（/etc/login.defs：UMASK 022，USERGROUPS_ENAB yes）
 pnpm check、oxlint（0 warning）、vitest 176/176 均通过；下面的问题这些检查都没有覆盖。
 
-🟠✅ F44 / 🟠✅ F45 / 🟡✅ F46 → 已修复，见上方。
-
-🟡 F47 --list 显示的解释器是 none，与实际运行不符（F43 的回归）
-   --list 分支在 loadRuntime() 之前就 exit，getDefaultInterpreter 读到的是 fallback 映射，
-   fallback 里只有 .js/.mjs/.cjs。
-   实测：a.ts → "none a.ts"，b.sh → "none b.sh"；实际调度时分别是 tsx 和 bash。
-   用户会以为 .ts/.sh 不被支持。上一轮回复里说"不影响输出正确性"是错的。
-   修法：--list 分支也先调 loadRuntime()（它本来就需要展示真实命令）；
-        或者 fallback 不再返回 none，未探测时直接抛错，避免静默给出错误结果。
-
-🟡 F48 pnpm check 不再检查 tests/，测试文件已有类型错误
-   check 脚本改成了 tsconfig.build.json（include 只有 src/**/*.ts）。
-   实测 tsc -p tsconfig.json：tests/helpers.ts、tests/run.test.ts 报 TS2459，
-   原因是 CronjobContext 改从 types/config.ts 导出后，测试仍从 src/config.js 导入。
-   vitest 只做转译、不做类型检查，所以测试照样通过，问题被掩盖了。
-   修法：check 改回 tsconfig.json（或另加 check:test），两处 import 改成 ../src/types/config.js。
-
-🟡 F49 文档里残留的旧文案
-   README 的 "A note on trailing words" 一节仍说 6 段会被当成 "seconds-level" 拒绝，
-   实际错误文案已改为 "6 fields cron is not supported, use 5 fields instead"。
-   src/index.ts 顶部注释仍写 "cron 表达式必须写在每个 ts、js 脚本的第一行或第二行"，
-   实际规则是整个文件头注释区（F7 之后就是这样）。
-   types/config.ts 的 exclude 注释只列了 5 个默认目录，漏了 dist / dist-tsc / coverage（F32 新增）；
-   include 注释写的是 path.join('**', '*.{ts,js,sh}')，与实际默认值 '**/*.{ts,js,sh}' 不一致。
+🟠✅ F44 / 🟠✅ F45 / 🟡✅ F46 / 🟡✅ F47 / 🟡✅ F48 / 🟡✅ F49 → 已修复，见上方。
 
 🟡 F50 权限检查只看 dir / logDir 本身，不看父目录和子目录
    F40 的威胁模型是"能写 dir 就等于能以 runner 身份执行代码"，但这个检查有两个缺口：

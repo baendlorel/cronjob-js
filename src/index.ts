@@ -1,7 +1,7 @@
 /**
  * # 全局定时任务主理，以每分钟读取来决定是否运行
  * # 1. 只支持：【分 时 日 月 周】 的写法
- * # 2. cron表达式必须写在每个ts、js脚本的第一行或第二行，以注释给出
+ * # 2. cron 表达式写在脚本的文件头注释区（第一条正式代码之前的注释），以注释给出
  */
 import type { UserCronjobConfig } from './types/config.js';
 import { performance } from 'node:perf_hooks';
@@ -27,14 +27,16 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
   const cx = createContext(config);
   cx.log.info(`Config loaded: ${JSON.stringify(cx)}`);
 
+  // 先探测运行时："tsx / python 可不可用"必须在开始调度前告诉用户；
+  // --list 展示的也是实际命令，同样需要真实映射，不能在 fallback 上列（F47）
+  const runtime = loadRuntime();
+
   if (process.argv.includes('--list') || process.argv.includes('-l')) {
     // 列出所有任务看一下效果就退出
     await list(cx);
     process.exit(0);
   }
 
-  // 先探测运行时："tsx / python 可不可用"必须在开始调度前告诉用户
-  const runtime = loadRuntime();
   await initialize(cx, runtime);
 
   const taskFn = async (now: Date) => {

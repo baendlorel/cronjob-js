@@ -56,26 +56,19 @@ export function detectRuntime() {
 
 export type Runtime = ReturnType<typeof detectRuntime>;
 
-/** 运行时还没探测到时使用；只会出现在 import 之后、cronjob() 启动之前 */
-const fallback: Runtime = {
-  interpreters: {
-    '.js': { cmd: process.execPath, args: [] },
-    '.mjs': { cmd: process.execPath, args: [] },
-    '.cjs': { cmd: process.execPath, args: [] },
-    none: { cmd: CMD_NONE, args: [] },
-  },
-  hasTsx: false,
-  pythonCmd: CMD_NONE,
-};
+/**
+ * 由 cronjob() 在开始调度或 --list 之前调用 loadRuntime() 赋值，这里的调用方只有它，
+ * 所以不需要 fallback，也不需要"没人探测就先探测一次"的兜底：
+ * 以前那份只含 .js/.mjs/.cjs 的 fallback 会让 --list 把 .ts/.sh 显示成 none（F47）。
+ */
+let runtime!: Runtime;
 
-let runtime: Runtime = fallback;
-
-/** cronjob() 启动时调用：探测一次并替换全局映射 */
+/** cronjob() 启动时调用：探测一次并缓存 */
 export function loadRuntime(): Runtime {
   runtime = detectRuntime();
   return runtime;
 }
 
-export function getDefaultInterpreter(ext: string) {
+export function getDefaultInterpreter(ext: string): Interpreter {
   return runtime.interpreters[ext] || runtime.interpreters.none;
 }

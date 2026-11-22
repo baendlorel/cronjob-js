@@ -18,14 +18,16 @@ export interface UserCronjobConfig {
    * Glob expressions to get cronjob scripts.
    * - Will be passed to fs.glob
    *
-   * default value is `[path.join('**', '*.{ts,js,sh}')]`
+   * default value is `['**&#47;*.{ts,js,sh}']` (i.e. `**` slash `*.{ts,js,sh}`)
    */
   include: string[];
 
   /**
    * Glob expressions to exclude cronjob scripts.
    * - Will be passed to fs.glob as `exclude`
-   * - 默认值会去掉node_modules、.git、.vscode、.claude、__pycache__
+   * - Replaces the default entirely (the two arrays are not merged)
+   * - default value drops node_modules, .git, .vscode, .claude, __pycache__,
+   *   dist, dist-tsc and coverage, each at any depth
    */
   exclude: string[];
 

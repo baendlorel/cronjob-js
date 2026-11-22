@@ -1,4 +1,4 @@
-import type { CronjobContext } from '../src/config.js';
+import type { CronjobContext } from '../src/types/config.js';
 import type { Job } from '../src/types/global.js';
 
 import { EventEmitter } from 'node:events';

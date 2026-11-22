@@ -119,13 +119,13 @@ The marker does not have to be at the start of the line: `// 说明 @cron 0 9 * 
 
 ### A note on trailing words
 
-Because the note is whatever follows the 5 fields, a **6th field that cron-parser can read** is treated as a seconds field and rejected:
+Because the note is whatever follows the 5 fields, a **6th token that cron-parser can read** makes the line look like a seconds-level expression, so it is rejected:
 
 ```js
-// @cron 0 9 * * * 1   ← "1" parses as a seconds field → error, not scheduled
+// @cron 0 9 * * * 1   ← parses as a 6-field (seconds) cron → error, not scheduled
 ```
 
-The check is: take the first 6 tokens and try to parse them. If that succeeds, the line is treated as seconds-level and skipped with an error. If it fails, the first 5 tokens are scheduled and everything after is the note. So anything cron-parser cannot resolve as a field works as a note:
+The check is: take the first 6 tokens and try to parse them. If that succeeds, the line is skipped with `6 fields cron is not supported, use 5 fields instead`. If it fails, the first 5 tokens are scheduled and everything after is the note. So anything cron-parser cannot resolve as a field works as a note:
 
 ```js
 // @cron 0 9 * * * 每天        ← Chinese note, 6-token parse fails → 5 fields + note
