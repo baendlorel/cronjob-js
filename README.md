@@ -1,6 +1,6 @@
 # krontab
 
-<div align="center"  style="margin:0 auto">
+<div align="center" style="margin:0 auto">
   <img src="./assets/icon.svg" alt="krontab" width="200" height="200" />
 </div>
 
@@ -39,18 +39,16 @@ Valid cron expression:
  └───────────────────── minute (0-59)
 ```
 
-Create a job script:
+Create a job script, `cronjob/backup.js`:
 
 ```js
-// cronjob/backup.js
 // @cron 0 3 * * * # 每天凌晨三点
 console.log('backup', new Date().toISOString());
 ```
 
-Start the runner from your project root:
+Start the runner from your project root, in `main.js`:
 
 ```js
-// main.js
 import { cronjob } from 'krontab';
 
 const task = await cronjob({ dir: './cronjob' });
@@ -172,8 +170,6 @@ Six-field expressions are **not** supported:
 // @cron 0 0 9 * * *   ← rejected, error logged, not scheduled
 ```
 
-The runner logs an error and skips that line — it will not silently reinterpret it as a 5-field expression. Fewer than 5 fields (`@cron 0 9 * *`) is rejected the same way, with an error; cron-parser would otherwise pad the missing field.
-
 ## Supported script types
 
 | Extension               | Interpreter                                            |
@@ -181,9 +177,9 @@ The runner logs an error and skips that line — it will not silently reinterpre
 | `.js` / `.mjs` / `.cjs` | the current Node.js (`process.execPath`)               |
 | `.ts` / `.mts` / `.cts` | `tsx` → `ts-node` → Node.js with native type stripping |
 | `.sh`                   | `bash`, falling back to `sh`                           |
-| `.py`                   | `python3` → `python` (only if added to `include`)      |
+| `.py`                   | `python3` → `python`                                   |
 
-`.mjs` / `.cjs` / `.mts` / `.cts` are only picked up if you add them to `include` (the default glob is `**/*.{ts,js,sh}`); their header comments use the same `//` and `/** */` rules as `.js` / `.ts`.
+`.mjs` / `.cjs` / `.mts` / `.cts` are matched by the default `include`, the same as `.ts` / `.js`; their header comments use the same `//` and `/** */` rules as `.js` / `.ts`.
 
 Extensions with no interpreter mapping are only reached if a script is extracted with one; in practice an unknown extension has no comment syntax for its header, so no `@cron` line is found and nothing is spawned. Such a job would log `[WARN] path=… unsupported extension` if it ever got that far.
 
@@ -191,7 +187,7 @@ If a `.ts` file has a `#!` line, that shebang wins over the default interpreter.
 
 If `tsx` is not installed, `.ts` still runs under Node.js directly, but not every TypeScript syntax is supported — a warning is logged at startup.
 
-`.py` is only used if you add it to `include`; the default glob does not match it.
+The default glob matches `.py` as well, so Python jobs run out of the box.
 
 ## Logs
 
@@ -252,7 +248,7 @@ The lock name is derived from `dir`, so it is predictable; any local process tha
 | ---------- | ------------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dir`      | `string`                                   | `process.cwd()`                   | Directory scanned for job scripts. Created if missing.                                                                                                            |
 | `logDir`   | `string`                                   | same as `dir`                     | Where per-job logs are written. Created if missing.                                                                                                               |
-| `include`  | `string[]`                                 | `['**/*.{ts,js,sh}']`             | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python.                                                                           |
+| `include`  | `string[]`                                 | `['**/*.{ts,js,sh,cts,mts,cjs,mjs,py}']` | Glob patterns for job scripts (passed to `fs.glob`).                                                                                                              |
 | `exclude`  | `string[]`                                 | see below                         | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
 | `timezone` | `string`                                   | `'Asia/Shanghai'`                 | IANA timezone used for cron matching and for the `timeFormat` timestamps. See [Daylight saving time](#daylight-saving-time).                                      |
 | `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                     | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
@@ -314,10 +310,10 @@ At startup the runner also warns about a missing `tsx` (only matters for `.ts`) 
 
 These are deliberate, not missing features:
 
-- **No retries.** There is no way to know whether the failure happened before or after a side effect, so noticing a failure is the job author's responsibility.
-- **No catch-up.** If the machine was down at 03:00, the 03:00 job does not run when it comes back — the time simply never arrived.
+- **No retries.** There is no way to know whether the failure happened before or after a side effect, so noticing a failure should be the job author's own responsibility.
+- **No catch-up.** If the machine was down at 03:00, the 03:00 job does not run when it comes back — purely because that time never arrived.
 - **Overlap happens.** A long job will overlap with its next run.
-- **No process management.** krontab does not watch or kill jobs.
+- **No process management.** krontab does not watch or kill job processes; it should not take control of things that are not its own.
 - **No exit-code alerts.** Every exit is logged; read the log if you care.
 - **No job lifecycle hooks.** There is no callback for "job started" or "job finished"; a minimal scheduler should not have them.
 - **The timer is minute-aligned, not second-aligned.** If the process is busy or the host is suspended across a boundary, the tick happens when the event loop gets to it, and there is no catch-up for the missed minute.

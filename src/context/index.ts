@@ -8,7 +8,7 @@ import { createLogger, defaultWrite } from './logger.js';
 
 /** 默认值：只改一处，测试与 createContext 都从这里断言 */
 export const DEFAULTS = {
-  include: ['**/*.{ts,js,sh}'],
+  include: ['**/*.{ts,js,sh,cts,mts,cjs,mjs,py}'],
   exclude: [
     '**/node_modules/',
     '**/.git/',
@@ -40,7 +40,10 @@ const createFormatter = (timezone: string) =>
  * - `runtime` 由调用方传入时直接用（便于测试注入）；不传就现场探测一次
  * - 探测只查 PATH（见 interpreter.ts），不执行外部命令
  */
-export function createContext(rawConfig?: Partial<UserCronjobConfig>, runtime: Runtime = detectRuntime()): CronjobContext {
+export function createContext(
+  rawConfig?: Partial<UserCronjobConfig>,
+  runtime: Runtime = detectRuntime(),
+): CronjobContext {
   const {
     dir = process.cwd(),
     logDir = dir,

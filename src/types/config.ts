@@ -19,7 +19,7 @@ export interface UserCronjobConfig {
    * 用来匹配任务脚本的 glob 表达式
    * - 会原样传给 fs.glob
    *
-   * 默认值是 `['**&#47;*.{ts,js,sh}']`（即 `**` 斜杠 `*.{ts,js,sh}`）
+   * 默认值是 `['**&#47;*.{ts,js,sh,cts,mts,cjs,mjs,py}']`（即 `**` 斜杠 `*.{ts,js,sh,cts,mts,cjs,mjs,py}`）
    */
   include: string[];
 

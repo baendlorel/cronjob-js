@@ -74,3 +74,10 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
 
   return task;
 }
+
+/**
+ * 启动定时任务主理，返回控制器
+ * - 只支持 5 段 cron：分 时 日 月 周
+ * - 同一 dir 只允许一个实例
+ */
+export const krontab = cronjob;

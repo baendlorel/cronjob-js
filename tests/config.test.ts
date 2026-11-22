@@ -10,7 +10,7 @@ describe('createContext — 默认值', () => {
     expect(cx).toMatchObject({
       dir: '/virtual/dir',
       logDir: '/virtual/dir',
-      include: ['**/*.{ts,js,sh}'],
+      include: ['**/*.{ts,js,sh,cts,mts,cjs,mjs,py}'],
       exclude: [
         '**/node_modules/',
         '**/.git/',
