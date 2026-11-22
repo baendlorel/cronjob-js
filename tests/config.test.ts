@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
 
 import { Tag } from '../src/consts.js';
 import { createContext } from '../src/config.js';
@@ -31,6 +32,18 @@ describe('createContext — 默认值', () => {
 
     const fn = (p: string) => `/work/${p}`;
     expect(createContext({ jobcwd: fn, write: () => {} }).jobcwd('/x')).toBe(fn('/x'));
+  });
+
+  it('normalizes dir and logDir to absolute paths', () => {
+    // 单例锁的 key 直接取 cx.dir，不规范化会让 './g'、'/abs/g'、'/abs/g/' 变成三个不同目录
+    const rel = createContext({ dir: './virtual/dir', logDir: './virtual/logs', write: () => {} });
+    expect(rel.dir).toBe(path.resolve('./virtual/dir'));
+    expect(rel.logDir).toBe(path.resolve('./virtual/logs'));
+    expect(rel.jobcwd('/x')).toBe(path.resolve('./virtual/dir'));
+
+    const trailing = createContext({ dir: '/virtual/dir/', write: () => {} });
+    expect(trailing.dir).toBe('/virtual/dir');
+    expect(trailing.logDir).toBe('/virtual/dir');
   });
 
   it('creates a formatter in the configured timezone', () => {

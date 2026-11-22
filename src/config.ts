@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { CronjobState, Tag } from './consts.js';
 
 export interface UserCronjobConfig {
@@ -129,6 +131,11 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     throw new TypeError('`exclude` must be an array of strings');
   }
 
+  // 统一成绝对路径：单例锁的 key、日志相对路径、glob 的 cwd 都依赖它。
+  // 否则 './g'、'/abs/g'、'/abs/g/' 会被当成三个不同的任务目录。
+  const absDir = resolve(dir);
+  const absLogDir = resolve(logDir);
+
   const formatter = new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -141,10 +148,11 @@ export function createContext(rawConfig?: Partial<UserCronjobConfig>): CronjobCo
     timeZone: timezone,
   });
 
+  const defaultJobcwd = typeof jobcwd !== 'function' && jobcwd === dir ? absDir : jobcwd;
   const cx: CronjobContext = {
-    dir,
-    logDir,
-    jobcwd: typeof jobcwd === 'function' ? jobcwd : () => jobcwd,
+    dir: absDir,
+    logDir: absLogDir,
+    jobcwd: typeof defaultJobcwd === 'function' ? defaultJobcwd : () => defaultJobcwd,
     include,
     exclude,
     timezone,

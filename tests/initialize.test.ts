@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -67,5 +67,22 @@ describe('initialize', () => {
     const b = tempDir();
     await expect(initialize(createTestContext({ dir: a }).cx)).resolves.toBeUndefined();
     await expect(initialize(createTestContext({ dir: b }).cx)).resolves.toBeUndefined();
+  });
+
+  it('treats relative / trailing-slash / symlink spellings of one dir as the same lock', async () => {
+    const root = tempDir();
+    const dir = path.join(root, 'jobs');
+    mkdirSync(dir);
+    const link = path.join(root, 'link');
+    symlinkSync(dir, link, 'dir');
+    await initialize(createTestContext({ dir }).cx);
+
+    // 尾部斜杠：createContext 会先规范化
+    await expect(initialize(createTestContext({ dir: dir + '/' }).cx)).rejects.toThrow('already running');
+    // 相对路径：同一个绝对目录
+    const relative = path.relative(process.cwd(), dir);
+    await expect(initialize(createTestContext({ dir: relative }).cx)).rejects.toThrow('already running');
+    // 符号链接：靠锁名里的 realpath 识别
+    await expect(initialize(createTestContext({ dir: link }).cx)).rejects.toThrow('already running');
   });
 });

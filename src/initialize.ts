@@ -1,6 +1,7 @@
 import type { CronjobContext } from './config.js';
 import { createHash } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import net from 'node:net';
 
 import { pythonCmd, hasTsx } from './interpreter.js';
@@ -33,6 +34,18 @@ const ensureDir = (cx: CronjobContext) => {
 };
 
 /**
+ * 锁名用的目录标识：realpath 兜住符号链接（/a/link 与 /b/real 是同一个目录时也能识别），
+ * 目录还不存在时退回 resolve 的结果（ensureDir 在拿锁之后才建目录）。
+ */
+const lockKeyOf = (dir: string) => {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return resolve(dir);
+  }
+};
+
+/**
  * 绑定成功则 resolve（进程活着就一直占着）；
  * 已被占用则 reject —— 不 process.exit，由宿主决定怎么退。
  * @returns {Promise<void>}
@@ -43,10 +56,10 @@ const acquireLock = (cx: CronjobContext) =>
      * 锁名跟着任务目录走，同一台机器跑多个项目时不会互相误伤。
      * \0 前缀 = 抽象 namespace，不落盘；进程退出（含 kill -9）由内核自动释放。
      */
-    const LOCK_NAME = '\0czdo-cronjob-runner-' + createHash('sha1').update(cx.dir).digest('hex').slice(0, 8);
+    const LOCK_NAME = '\0cronjob-js-' + createHash('sha1').update(lockKeyOf(cx.dir)).digest('hex').slice(0, 8);
     const server = net.createServer();
     server.once('error', (e: NodeJS.ErrnoException) => {
-      reject(e.code === 'EADDRINUSE' ? new Error('cronjob-runner already running') : e);
+      reject(e.code === 'EADDRINUSE' ? new Error('cronjob-js already running') : e);
     });
     server.listen(LOCK_NAME, () => {
       server.unref(); // 不阻止进程退出

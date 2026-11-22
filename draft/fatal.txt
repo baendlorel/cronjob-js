@@ -103,28 +103,35 @@ cronjob-runner 问题清单
    遗留风险：engines 默认只是建议，npm 不拦（pnpm 只在 engine-strict 下拦）；
    pm2 直接跑也不会校验版本，低版本机器会一直"跑得起来但不跑任务"。未单列，需要时补运行期版本检查。
 
+✅ F25 单例锁的 key 直接取未规范化的 cx.dir
+   createContext 对 dir/logDir 做 resolve（jobcwd 的字符串默认值同步改成 absDir，显式传入的不动）；
+   acquireLock 的 key 再套一层 realpathSync（目录不存在时退回 resolve）。
+   实测：'./g'、'/tmp/cjrepro/g'、'/tmp/cjrepro/g/' 后两个被拒绝；符号链接与真实目录被识别为同一锁；
+   projA/projB 都写 './cronjob' 时各自拿到锁。config / initialize 测试各补了用例。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ c78b273 + 本轮的测试/import 修补（F23、F24 已转入上方已修复区）
+检查版本：main @ c78b273 + 本轮的修补（F23、F24、F25 已转入上方已修复区）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 163/163 均通过；下面的问题现有测试都没有覆盖。
+tsc、oxlint（4 条 warning，见 F41）、vitest 165/165 均通过；下面的问题现有测试都没有覆盖。
 
-🟠 F25 单例锁的 key 直接取未规范化的 cx.dir
-   同一目录换个写法就能双开：'./g'、'/tmp/cjrepro/g'、'/tmp/cjrepro/g/' 三次 initialize 都拿到了锁，
-   两个 runner 同时跑时，每个任务每次都会 spawn 两遍。
-   不同目录之间反而会冲突：projA 和 projB 都照 README 写 dir: './cronjob'，
-   hash 相同，后启动的 projB 报 "cronjob-runner already running"，起不来。
-   这与 initialize.ts 注释"同一台机器跑多个项目时不会互相误伤"正好相反。
-   修复：createContext 里先对 dir/logDir 做 path.resolve（必要时再 realpath），锁 key 用规范化后的路径。
+🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 → 已修复，见上方。
 
 🟠 F26 pm2 cluster 模式下单例锁失效
    cluster worker 的 listen 由 primary 代为执行并共享句柄，两个 worker 能同时拿到同名锁。
    用 node:cluster fork 2 个 worker 模拟（pm2 -i 基于 node:cluster，未在真实 pm2 -i 上跑）：
    两个 worker 都 ACQUIRED，所有任务会被跑 N 次。
-   修复：server.listen({ path: LOCK_NAME, exclusive: true })，实测第二个 worker 得到 EADDRINUSE。
+   推荐修法：server.listen({ path: LOCK_NAME, exclusive: true })。
+     实测第二个 worker 得到 EADDRINUSE，initialize 照旧 reject，错误分支不用改。
+     只改一行，不影响 fork 模式的现有行为，也与 F25 的 realpath 规范化不冲突。
+     还差一步：在真实 pm2 -i 2 上复验一次。
+   补充：runner 是单实例守护进程，常规部署只该用 fork 模式；exclusive 只是兜底，
+     避免误用 -i 时同一任务成倍执行。
+   备选（不推荐）：改用 flock / 文件锁 —— 要自己处理过期锁和清理，
+     与现在"进程退出由内核自动释放"的语义冲突，复杂度更高。
 
 🟠 F27 按 README 的 pm2 命令部署时，pm2 restart / stop 会杀掉正在跑的任务
    pm2 默认开启 treekill，按进程树杀子进程，detached + unref 挡不住。
