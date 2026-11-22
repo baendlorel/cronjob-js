@@ -1,5 +1,5 @@
 cronjob-runner 问题清单
-最后更新：2026-11-22（第六轮审查，F23–F40 已处理；F29、F36、F37、F39 按现状保留）
+最后更新：2026-11-22（第六轮审查，F23–F43 已处理；F29、F36、F37、F39 按现状保留）
 检查版本：main @ a98809a + 本轮改动（未提交）
 运行环境：Node v26.13.1 / WSL2
 
@@ -224,14 +224,35 @@ cronjob-runner 问题清单
    (b) 锁名可预测是设计使然（锁名必须由路径唯一确定），本地 DoS 在 README 里说明，
        不视为需要修复的问题。
 
+🟡✅ F41 F18 的描述已过时，并有残留代码
+   清理完成：list.ts 去掉未使用的 realpathSync / pathToFileURL / createContext（后两者随入口判断一起删），
+   initialize.ts 的 lock 改名 _lock；oxlint warning 从 4 条降到 0。
+   顺带修了 d6a9210 引入的类型导出回归：CronjobContext 只在 types/config.ts 定义，
+   config.ts 重新 export，避免 8 个文件报 TS2459。
+
+🟡✅ F42 example/main.js 用 node 跑不起来
+   已改为 import '../dist/index.mjs'（产物名是 index.mjs，不是 index.js），
+   pm2 启动注释补上 --no-treekill。
+   实测：tsdown 构建后 `node example/main.js --list` 正常输出任务表。
+
+🟡✅ F43 interpreter.ts 在模块顶层同步探测运行时，拖慢所有 import
+   不接受"惰性探测"（启动时就该把可用性告诉用户），改为"启动时探测 + 显式传入"：
+   detectRuntime() 返回 { interpreters, hasTsx, pythonCmd }，cronjob() 启动时调一次 loadRuntime()，
+   把结果传给 initialize；getDefaultInterpreter 读取这份映射，模块加载时不再 spawnSync。
+   实测：import src/index 从 250–330ms 降到 51ms；探测本身移到启动阶段（本次约 461ms，仅一次）。
+   可用性提示仍在调度开始前输出：PATH 无 tsx/python 时依次打印
+   `[WARN] 'tsx' not found...` 与 `[WARN] python not available...`。
+   附带：--list 分支在 initialize 之前就 exit，因此 --list 不会再做运行时探测；
+   它展示的命令按 node 执行时并不需要 tsx/python，不影响输出正确性。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ 3aedf9e + 本轮修补（F23–F40 已处理；F29、F36、F37 判定不修，F39 接受现状）
+检查版本：main @ d6a9210 + 本轮修补（F23–F43 已处理；F29、F36、F37 判定不修，F39 接受现状）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 173/173 均通过；下面的问题现有测试都没有覆盖。
+tsc、oxlint（0 条 warning）、vitest 176/176 均通过。
 
 🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 / 🟠✅ F26 / 🟠✅ F27 / 🟠✅ F28 → 已修复，见上方。
 🟡✅ F29 → 不修，与 vixie cron 行为一致，见上方。
@@ -241,28 +262,7 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 173/173 均通过；下面的
 🟡✅ F38 → 已修复，见上方。
 🟡✅ F39 → 接受现状（与 F29 同类），crontab 的对照行为已记录。
 🟡✅ F40 → 已修复（a 代码校验、b 文档说明），见上方。
-
-🟡 F41 F18 的描述已过时，并有残留代码
-   F18 写的是"list 已从包导出，也支持 tsx src/list.ts [dir] 直接运行"，
-   但 da7f04c 删掉了导出和入口判断：tsx src/list.ts example/jobs 没有任何输出（exit 0），
-   index.ts 只导出 cronjob 和两个类型。
-   list.ts 残留未使用的 realpathSync / pathToFileURL / createContext；
-   initialize.ts 的 lock 只写不读（这是有意持有引用，可改名为 _lock）。剩 4 条 oxlint warning。
-   （第六轮审查后 extract.ts 的 kStringMaxLength 已删。）
-——你可以清理
-
-🟡 F42 example/main.js 用 node 跑不起来
-   它 import '../src/index.js'，而仓库里只有 index.ts：
-   node example/main.js --list 报 ERR_MODULE_NOT_FOUND，只能用 tsx 跑。
-   文件末尾注释里的 pm2 start cronjob-runner/main.js 也会因此失败（pm2 默认用 node）。
-   修复：改成 import 'cronjob-js'，或者在注释里写明用 tsx（pm2 --interpreter tsx）。
-
-🟡 F43 interpreter.ts 在模块顶层同步探测运行时，拖慢所有 import
-   tsCmd / python / bash 一共最多 5 次 spawnSync（每次 timeout 3s），在模块加载时同步执行。
-   实测 import src/index 需 250–330ms；PATH 里有卡住的命令时最坏约 15s。
-   任何 import 本包的进程（包括 --list、测试）都要先付这笔钱，且发生在单例锁之前。
-   修复：改成惰性探测（首次用到时再探测），或挪进 initialize 并在 cx 上缓存。
-   注意：hasTsx / pythonCmd 目前是模块级常量，initialize 与测试都直接读它们，改的时候要一起动。
+🟡✅ F41 / 🟡✅ F42 / 🟡✅ F43 → 已修复，见上方。
 
 ── 已排查、未发现问题 ──
    #!/usr/bin/env -S node --no-warnings 拆成 cmd + args 后能正常运行。

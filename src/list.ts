@@ -1,8 +1,6 @@
 import path from 'node:path';
-import { realpathSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
 
-import { type CronjobContext, createContext } from './config.js';
+import type { CronjobContext } from './types/config.js';
 import { tryGlobSync } from './utils.js';
 import { loadFiles } from './syntax/job.js';
 import { getJobItem } from './syntax/extract.js';

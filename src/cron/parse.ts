@@ -1,5 +1,5 @@
-import type { CronjobContext } from '../config.js';
 import { type CronExpression, CronExpressionParser } from 'cron-parser';
+import type { CronjobContext } from '../types/config.js';
 
 /**
  * 非得要try很奇怪，但这是官方推荐的方式

@@ -1,4 +1,4 @@
-import type { CronjobContext } from '../config.js';
+import type { CronjobContext } from '../types/config.js';
 
 import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';

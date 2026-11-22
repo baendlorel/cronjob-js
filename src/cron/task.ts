@@ -1,4 +1,4 @@
-import type { CronjobContext } from '../config.js';
+import type { CronjobContext } from '../types/config.js';
 import { CronjobState } from '../consts.js';
 
 export interface TaskController {

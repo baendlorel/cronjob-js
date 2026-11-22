@@ -13,6 +13,7 @@ import { runTask, type TaskController } from './cron/task.js';
 import { getJobs, loadFiles } from './syntax/job.js';
 import { run } from './run.js';
 import { initialize } from './initialize.js';
+import { loadRuntime } from './interpreter.js';
 import { list } from './list.js';
 
 export type { TaskController } from './cron/task.js';
@@ -32,7 +33,9 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
     process.exit(0);
   }
 
-  await initialize(cx);
+  // 先探测运行时："tsx / python 可不可用"必须在开始调度前告诉用户
+  const runtime = loadRuntime();
+  await initialize(cx, runtime);
 
   const taskFn = async (now: Date) => {
     // 1、查找CRONJOB_DIR下面的所有符合suffix的文件
