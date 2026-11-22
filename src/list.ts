@@ -50,7 +50,7 @@ export async function list(cx: CronjobContext) {
 
     for (const { cron, group } of item.flatCronGroups) {
       const exp = cron.stringify();
-      const next = nextRunText(cx, exp);
+      const next = nextRunText(cx, exp, f.filepath);
       const prefix = group > 0 ? `  [${group}] ` : '';
       console.log(`${next.padEnd(24)} ${(prefix + exp).padEnd(18)} ${relativePath.padEnd(32)} ${invocation}`);
     }
@@ -58,8 +58,8 @@ export async function list(cx: CronjobContext) {
 }
 
 /** 表达式在上一次 parse 后可能因 impossible date 抛错，这里只展示、不中断整个列表 */
-function nextRunText(cx: CronjobContext, exp: string) {
-  const parsed = parseExp(cx, exp);
+function nextRunText(cx: CronjobContext, exp: string, filepath: string) {
+  const parsed = parseExp(cx, exp, filepath);
   if (!parsed) {
     return '(invalid)';
   }

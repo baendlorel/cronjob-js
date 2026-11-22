@@ -100,7 +100,7 @@ cronjob-runner 问题清单
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
 tsc、oxlint（4 条 warning，见 F41）、vitest 162/162 均通过；下面的问题现有测试都没有覆盖。
 
-🔴 F23 `H`（hash）字段每次 parse 都随机取值，而 runner 每分钟都重新 parse
+🔴✅ F23 `H`（hash）字段每次 parse 都随机取值，而 runner 每分钟都重新 parse
    cron-parser 5 支持 H，不传 hashSeed 时每次随机：同一条 H * * * * 连续 parse 5 次，
    minute 依次是 10 / 1 / 55 / 54 / 28。
    模拟 6 小时逐分钟 tick，H * * * * 每小时 spawn 次数为 [1,0,2,2,1,2]（应为每小时 1 次）。
@@ -108,7 +108,7 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 162/162 均通过；下面的
    修复：parseExp 传 hashSeed（如相对路径），实测同一 seed 3 次都是 4，换文件变成 55；
         或者在 extract 里直接拒绝 H。
 
-🟠 F24 Node 22.0–22.13 上一个任务都不跑（F8 的 >=22.0.0 结论有误）
+🟠✅ F24 Node 22.0–22.13 上一个任务都不跑（F8 的 >=22.0.0 结论有误）
    fs.globSync 的 exclude 从 22.14.0 起才接受 glob 数组（nodejs#56489），之前只接受函数。
    用 v22.13.1 跑 dist：启动时照常打印 "Cronjob start!"，之后每分钟一条
    [ERROR] Error while globbing scripts. ERR_INVALID_ARG_TYPE，什么都不 spawn。

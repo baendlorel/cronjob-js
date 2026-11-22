@@ -8,6 +8,7 @@ import { parseExp } from '../cron/parse.js';
 import { getDefaultInterpreter } from '../interpreter.js';
 import { getAllowFn } from './allow.js';
 import { getShebang } from './shebang.js';
+import { kStringMaxLength } from 'node:buffer';
 
 /**
  * 从一行文本中提取带标记的 cron 表达式
@@ -55,14 +56,14 @@ export function extractCron(
   // 前 6 段能解析说明写的是秒级定时，本项目只支持 5 段，整行不调度
   if (tokens.length >= 6) {
     const sixExpStr = tokens.slice(0, 6).join(' ');
-    if (parseExp(cx, sixExpStr)) {
+    if (parseExp(cx, sixExpStr, filepath)) {
       cx.log.err(`Seconds-level cron is not supported, use 5 fields instead: "${sixExpStr}" in file: ${filepath}`);
       return null;
     }
   }
 
   // 取前 5 段，之后是说明文字
-  return parseExp(cx, tokens.slice(0, 5).join(' '));
+  return parseExp(cx, tokens.slice(0, 5).join(' '), filepath);
 }
 
 /**

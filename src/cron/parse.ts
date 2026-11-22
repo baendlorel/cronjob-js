@@ -4,9 +4,9 @@ import { type CronExpression, CronExpressionParser } from 'cron-parser';
 /**
  * 非得要try很奇怪，但这是官方推荐的方式
  */
-export const parseExp = (cx: CronjobContext, exp: string): CronExpression | null => {
+export const parseExp = (cx: CronjobContext, exp: string, filepath: string): CronExpression | null => {
   try {
-    return CronExpressionParser.parse(exp, { tz: cx.timezone });
+    return CronExpressionParser.parse(exp, { tz: cx.timezone, hashSeed: filepath });
   } catch {
     return null;
   }

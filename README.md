@@ -14,7 +14,7 @@ pnpm add cronjob-js
 npm i cronjob-js
 ```
 
-Requires **Node.js >= 22**.
+Requires **Node.js >= 22.14.0**.
 
 ## Quick start
 
@@ -173,11 +173,13 @@ If `tsx` is not installed, `.ts` still runs under Node.js directly, but not ever
 Everything goes to the runner's stdout (use `pm2 --log` to persist it) plus a per-job log file:
 
 - **Runner log**: one line per event — `[INFO]`, `[WARN]`, `[ERROR]`, `[SPAWN]`, `[EXIT]`, `[DEBUG]`. The three job lifecycle lines are:
+
   ```
   2026/11/21 09:00:00.017 [SPAWN] path=daily/report.js pid=12345
   2026/11/21 09:00:04.210 [EXIT] path=daily/report.js pid=12345 code=0 signal=null
   2026/11/21 09:00:00.018 [ERROR] path=daily/report.js pid=-1 Error: spawn ENOENT
   ```
+
   `[ERROR]` uses `pid=-1` when the process never started.
 - **Timestamps** are `yyyy/MM/dd HH:mm:ss.SSS` in `timezone` (that is `zh-CN` `Intl.DateTimeFormat` output).
 - **Job log**: `<logDir>/<relative-path>.log`, appended, with the `.log` suffix after the full filename (`daily/report.js` → `<logDir>/daily/report.js.log`). Each job's own stdout/stderr goes here; the pid is only in the runner log.
