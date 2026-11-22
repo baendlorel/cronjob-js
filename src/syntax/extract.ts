@@ -70,11 +70,13 @@ export function extractCron(
  * cron表达式对象、分组信息、文件路径以及解释器信息
  *
  * @param filepath 文件路径，用于日志输出
- * @param lines 文件内容的每一行
+ * @param content 文件头内容（可以是整文件；第一行正式代码之后的不会用到）
  */
-export function getJobItem(cx: CronjobContext, filepath: string, lines: string[]): JobItem | null {
+export function getJobItem(cx: CronjobContext, filepath: string, content: string): JobItem | null {
   const ext = extname(filepath);
   const allowFn = getAllowFn(ext);
+
+  let lines = content.split('\n').map((line) => line.trim());
 
   if (lines.length === 0) {
     return null;

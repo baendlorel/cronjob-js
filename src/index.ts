@@ -47,7 +47,7 @@ export async function cronjob(config?: Partial<UserCronjobConfig>): Promise<Task
     const performanceNow = performance.now();
     cx.log.debug(`Start`);
 
-    const files = await loadFiles(filepaths);
+    const files = await loadFiles(cx, filepaths);
     const jobs = await getJobs(cx, files, now);
 
     for (let i = 0; i < jobs.length; i++) {

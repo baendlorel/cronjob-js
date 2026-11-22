@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { Tag } from '../src/consts.js';
 import { getJobItem } from '../src/syntax/extract.js';
-import { createTestContext, logsOf, parseLines } from './helpers.js';
+import { createTestContext, logsOf } from './helpers.js';
 
 const item = (content: string, filepath = '/virtual/dir/x.js', ctx = createTestContext()) => {
   const { cx, logs } = ctx;
-  return { item: getJobItem(cx, filepath, parseLines(content)), logs, cx };
+  return { item: getJobItem(cx, filepath, content), logs, cx };
 };
 
 const expsOf = (content: string) => {

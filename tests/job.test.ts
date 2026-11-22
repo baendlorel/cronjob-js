@@ -131,7 +131,7 @@ describe('loadFiles', () => {
     const missingPath = path.join(dir, 'missing.js');
     await writeFile(okPath, '// @cron * * * * *\n', 'utf8');
 
-    const result = await loadFiles([okPath, missingPath]);
+    const result = await loadFiles(cx, [okPath, missingPath]);
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ filepath: okPath, content: '// @cron * * * * *\n', error: null });
     expect(result[1].content).toBeNull();
@@ -147,7 +147,7 @@ describe('loadFiles', () => {
     const paths = Array.from({ length: 205 }, (_, i) => path.join(dir, `f${i}.js`));
     await Promise.all(paths.map((p, i) => writeFile(p, String(i), 'utf8')));
 
-    const result = await loadFiles(paths);
+    const result = await loadFiles(cx, paths);
     expect(result.map((r) => r.content)).toEqual(paths.map((_, i) => String(i)));
   });
 });

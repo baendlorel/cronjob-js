@@ -1,11 +1,15 @@
 import type { Job, JobItem } from '../types/job.js';
 import type { CronjobContext } from '../config.js';
 
-import { readFile } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
+
 import { getJobItem } from './extract.js';
 import { matches } from '../cron/parse.js';
+import { getAllowFn } from './allow.js';
+import { readHeader } from './header.js';
 
-type FileContent =
+export type FileContent =
   | {
       filepath: string;
       content: string;
@@ -18,14 +22,29 @@ type FileContent =
     };
 
 const CHUNK_SIZE = 100;
-export async function loadFiles(filepaths: string[]): Promise<Array<FileContent>> {
+
+/**
+ * stat 并读取文件头，一个文件对应一条结果，失败也包成结果、不抛出。
+ * - 先 stat：FIFO、设备、目录等非普通文件直接跳过（对 FIFO 做 readFile 会永久阻塞线程池）
+ * - 只读文件头：大文件不再整读进内存
+ */
+export async function loadFiles(cx: CronjobContext, filepaths: string[]): Promise<Array<FileContent>> {
   const result: Array<FileContent> = [];
   for (let i = 0; i < filepaths.length; i += CHUNK_SIZE) {
-    const promises = filepaths.slice(i, i + CHUNK_SIZE).map((filepath) =>
-      readFile(filepath, 'utf8')
-        .then((content) => ({ filepath, content, error: null }))
-        .catch((error) => ({ filepath, content: null, error })),
-    );
+    const promises = filepaths.slice(i, i + CHUNK_SIZE).map(async (filepath): Promise<FileContent> => {
+      const relativePath = path.relative(cx.dir, filepath);
+      try {
+        const s = await stat(filepath);
+        if (!s.isFile()) {
+          cx.log.warn(`Skipped non-regular file: ${relativePath}`);
+          return { filepath, content: null, error: new Error('not a regular file') };
+        }
+        const content = await readHeader(cx, filepath, getAllowFn(path.extname(filepath)));
+        return { filepath, content, error: null };
+      } catch (error) {
+        return { filepath, content: null, error };
+      }
+    });
     const r = await Promise.all(promises);
     result.push(...r);
   }
@@ -74,12 +93,11 @@ export function getJobs(cx: CronjobContext, files: FileContent[], now: Date): Jo
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     if (!f.content) {
-      cx.log.err(`Error loading file ${f.filepath}: ${f.error}`);
+      cx.log.err(`Error loading file ${path.relative(cx.dir, f.filepath)}: ${f.error}`);
       continue;
     }
 
-    const lines = f.content.split('\n').map((line) => line.trim());
-    const jobItem = getJobItem(cx, f.filepath, lines);
+    const jobItem = getJobItem(cx, f.filepath, f.content);
     if (!jobItem) {
       continue;
     }

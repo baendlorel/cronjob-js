@@ -25,18 +25,21 @@ export async function list(cx: CronjobContext) {
     return;
   }
 
-  const files = await loadFiles(filepaths);
+  const files = await loadFiles(cx, filepaths);
 
   for (const f of files) {
     const relativePath = path.relative(cx.dir, f.filepath);
 
     if (!f.content) {
+      // loadFiles 已经为非常规文件打过 WARN，这里只报读取失败
+      if (f.error instanceof Error && f.error.message === 'not a regular file') {
+        continue;
+      }
       cx.log.err(`Error loading file ${relativePath}: ${f.error}`);
       continue;
     }
 
-    const lines = f.content.split('\n').map((line) => line.trim());
-    const item = getJobItem(cx, f.filepath, lines);
+    const item = getJobItem(cx, f.filepath, f.content);
     if (!item) {
       continue;
     }

@@ -156,10 +156,12 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 166/166 均通过；下面的
    主日志只有 [DEBUG] Start，没有 Finished 也没有 Error。process.exit 同样卡住，只能靠外部 kill。
    修复：glob 之后只保留普通文件（stat().isFile() 不会在 FIFO 上阻塞）。
         挂起的网络盘没有完整解法，可以在文档里提一句。
+   ——我在utils.ts里写了nolater。你看看能否用在这里，给每个文件加一个，这样防止等太久
 
 🟡 F31 每轮都把整个文件读进内存，实际只需要文件头
    一个 214MB 的 .js：单轮耗时 346ms，RSS +321MB，每分钟重复一次。
    修复：只读前若干 KB（如 64KB），或读到第一行正式代码为止。
+   ——你先说说这个函数怎么写我再决定
 
 🟡 F32 默认 exclude 只排除了顶层 node_modules
    'node_modules/' 只匹配 dir 根下那一层，sub/node_modules/** 照样被 glob，每分钟读一遍。

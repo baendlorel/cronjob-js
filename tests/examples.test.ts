@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { getJobItem } from '../src/syntax/extract.js';
 import { run } from '../src/run.js';
-import { createTestContext, parseLines } from './helpers.js';
+import { createTestContext } from './helpers.js';
 
 /**
  * 这一组不 mock 任何东西：直接拿 example/jobs 下的真实脚本跑一遍完整链路
@@ -27,7 +27,7 @@ const parse = (rel: string) => {
   const { cx, logs } = createTestContext({ dir: JOBS });
   const filepath = JOBS + rel;
   const content = readFileSync(filepath, 'utf8');
-  return { item: getJobItem(cx, filepath, parseLines(content)), logs };
+  return { item: getJobItem(cx, filepath, content), logs };
 };
 
 describe('example/jobs — 解析结果', () => {
