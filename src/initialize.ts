@@ -1,6 +1,6 @@
 import type { CronjobContext } from './config.js';
 import { createHash } from 'node:crypto';
-import { mkdirSync, realpathSync } from 'node:fs';
+import { mkdirSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import net from 'node:net';
 
@@ -32,6 +32,34 @@ const ensureDir = (cx: CronjobContext) => {
     mkdirSync(cx.logDir, { recursive: true });
   }
 };
+
+/**
+ * dir / logDir 必须只有 runner 用户能写。
+ * - dir 可写 = 能以 runner 的身份执行任意代码；logDir 可写 = 能往任务日志里追加内容
+ * - 属主不是当前用户、或 group/other 有写位，都直接报错（不是告警）
+ * - root 除外：root 能写任何目录，这条检查对 root 没有意义
+ */
+const checkDirPermissions = (cx: CronjobContext) => {
+  if (typeof process.getuid !== 'function' || process.getuid() === 0) {
+    return;
+  }
+  for (const [name, dir] of [
+    ['dir', cx.dir],
+    ['logDir', cx.logDir],
+  ] as const) {
+    const { mode, uid } = statSync(dir);
+    const writableByOthers = (mode & 0o022) !== 0;
+    if (uid !== process.getuid() || writableByOthers) {
+      throw new Error(
+        `${name} must be owned by the current user and not group/world-writable: ${dir} ` +
+          `(owner=${uid}, mode=${(mode & 0o777).toString(8)})`,
+      );
+    }
+  }
+};
+
+/** 写日志时用：任务输出可能含密钥，不让同机其他用户读 */
+export const LOG_FILE_MODE = 0o640;
 
 /**
  * 锁名用的目录标识：realpath 兜住符号链接（/a/link 与 /b/real 是同一个目录时也能识别），
@@ -73,6 +101,7 @@ const acquireLock = (cx: CronjobContext) =>
 export const initialize = async (cx: CronjobContext) => {
   // 先拿锁：重复实例不必再做后面的探测
   await acquireLock(cx);
+  checkDirPermissions(cx);
   ensureDir(cx);
   orTsx(cx);
   orPython(cx);

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -84,5 +84,32 @@ describe('initialize', () => {
     await expect(initialize(createTestContext({ dir: relative }).cx)).rejects.toThrow('already running');
     // 符号链接：靠锁名里的 realpath 识别
     await expect(initialize(createTestContext({ dir: link }).cx)).rejects.toThrow('already running');
+  });
+
+  it('refuses a group/world-writable dir or logDir (F40)', async () => {
+    if (process.getuid?.() === 0) return; // root 不检查
+    const root = tempDir();
+    const dir = path.join(root, 'jobs');
+    const logDir = path.join(root, 'logs');
+    mkdirSync(dir);
+    mkdirSync(logDir);
+
+    // 每次用独立的 logDir 才能绕过上一轮已经拿到的锁
+    chmodSync(dir, 0o777);
+    await expect(initialize(createTestContext({ dir, logDir }).cx)).rejects.toThrow('must be owned by the current user');
+
+    // 锁在 acquireLock 里拿、失败也会留在进程里，所以每一轮换一个新的 logDir 来避开锁
+    const logDir2 = path.join(root, 'logs2');
+    mkdirSync(logDir2);
+    chmodSync(dir, 0o755);
+    chmodSync(logDir2, 0o775);
+    await expect(initialize(createTestContext({ dir: path.join(root, 'jobs2'), logDir: logDir2 }).cx)).rejects.toThrow(
+      'logDir must be owned by the current user',
+    );
+
+    const logDir3 = path.join(root, 'logs3');
+    mkdirSync(logDir3);
+    chmodSync(logDir3, 0o755);
+    await expect(initialize(createTestContext({ dir: path.join(root, 'jobs3'), logDir: logDir3 }).cx)).resolves.toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 cronjob-runner 问题清单
-最后更新：2026-11-22（第六轮审查，F23–F38 已处理；F29、F36、F37 判定不修）
+最后更新：2026-11-22（第六轮审查，F23–F40 已处理；F29、F36、F37、F39 按现状保留）
 检查版本：main @ a98809a + 本轮改动（未提交）
 运行环境：Node v26.13.1 / WSL2
 
@@ -193,14 +193,40 @@ cronjob-runner 问题清单
    实测示例文件：每轮 WARN 从 2 条降到 1 条（只剩真正缺标记的说明行），路径为 b.js。
    遗留：真正写错的表达式仍是每轮一条 Error（1440 次/天），这是"让人看见"的设计，未改。
 
+🟡✅ F39 有夏令时的时区：回拨那天同一钟点跑两次，前跳那天该钟点被跳过
+   实测：America/New_York 2026-11-01 01:30 出现两次，30 1 * * * 两个 UTC 时刻都命中；
+   2026-03-08 的 30 2 * * * 全天 0 次命中。默认的 Asia/Shanghai 没有夏令时，不受影响。
+   crontab（Debian cron 8 的 man page，即 vixie cron 系）的行为：
+     "If the time has moved forwards, those jobs which would have run in the time that was skipped
+      will be run soon after the change. Conversely, if the time has moved backwards by less than
+      3 hours, those jobs that fall into the repeated time will not be re-run."
+     "Only jobs that run at a particular time (not @hourly, nor with '*' in the hour or minute
+      specifier) are affected. Jobs which are specified with wildcards are run based on the new
+      time immediately."
+     "Clock changes of more than 3 hours are considered to be corrections to the clock."
+   即：前跳被跳过的那次会补跑、回拨的重复不重跑；只影响固定时刻，通配符按新时间走；±3h 才算 DST。
+   本项目的 tick 只看 wall clock，回拨会重复、前跳会跳过，与 cron 正好相反。
+   结论：不改代码（与 F29 同属"接受为已知行为"），README 的 timezone 说明已写明。
+
+🟡✅ F40 安全：日志文件和单例锁的权限
+   (a) 启动时检查 dir / logDir：属主不是当前用户、或 group/other 有写位，直接抛错不启动。
+       日志改为以 0640 打开新建文件（既有文件保持原 mode）。
+       实测：777 的 dir → "dir must be owned by the current user and not group/world-writable"；
+             logDir 0775 同样报错；正常 0755 通过；新建日志 mode=640。
+       root 与无 process.getuid 的平台（Windows）跳过检查，README 已写明原因。
+       未做 O_NOFOLLOW：符号链接追加仍可能，但 logDir 只有 runner 用户可写后，
+       本机其他用户已无法投放链接。
+   (b) 锁名可预测是设计使然（锁名必须由路径唯一确定），本地 DoS 在 README 里说明，
+       不视为需要修复的问题。
+
 所有已知问题均已修复或已在文档中约定。新增问题请按上面的格式追加，并实际复现后再标级别。
 
 
 ══ 待修复（第六轮审查）══════════════════════
 检查日期：2026-11-22
-检查版本：main @ 3aedf9e + 本轮修补（F23–F38 已处理；F29、F36、F37 判定不修）
+检查版本：main @ 3aedf9e + 本轮修补（F23–F40 已处理；F29、F36、F37 判定不修，F39 接受现状）
 运行环境：Node v26.13.1 / 官方 v22.13.1 二进制（sha256 已校验）/ pm2 7.1.2 / WSL2
-tsc、oxlint（4 条 warning，见 F41）、vitest 172/172 均通过；下面的问题现有测试都没有覆盖。
+tsc、oxlint（4 条 warning，见 F41）、vitest 173/173 均通过；下面的问题现有测试都没有覆盖。
 
 🔴✅ F23 / 🟠✅ F24 / 🟠✅ F25 / 🟠✅ F26 / 🟠✅ F27 / 🟠✅ F28 → 已修复，见上方。
 🟡✅ F29 → 不修，与 vixie cron 行为一致，见上方。
@@ -208,24 +234,8 @@ tsc、oxlint（4 条 warning，见 F41）、vitest 172/172 均通过；下面的
 🟡✅ F36 → 维持现状，`*` 前缀是通行写法，见上方。
 🟡✅ F37 → 不修，按"严格优先于宽松"的既定原则，见上方。
 🟡✅ F38 → 已修复，见上方。
-
-🟡 F39 有夏令时的时区：回拨那天同一钟点跑两次，前跳那天该钟点被跳过
-   America/New_York 的 2026-11-01 01:30 出现两次，30 1 * * * 在这两个 UTC 时刻都命中；
-   2026-03-08 的 30 2 * * * 全天 0 次命中。默认的 Asia/Shanghai 没有夏令时，不受影响。
-   修复：在 README 的 timezone 说明里写明。F29 的去重按 UTC 分钟算，挡不住这种情况。
-
-🟡 F40 安全：日志文件和单例锁的权限
-   (a) run.ts 用 openSync(logfile, 'a') 打开日志，会跟随符号链接。
-       实测 logDir/x.js.log → ../victim.txt，任务输出被追加进了 victim.txt。
-       若 runner 以 root 运行、logDir 对其他用户可写，就能把任务输出追加到任意文件。
-       新建的日志按 umask 是 0644，任务输出里的密钥对本机所有用户可读。
-       dir 可写本身就等于能以 runner 的身份执行任意代码，所以 dir 和 logDir 都必须只有 runner 用户可写；
-       目前代码没有检查，README 也没写。
-       修复：启动时检查 dir/logDir 的属主和 group/other 写权限并告警；
-            日志用 O_NOFOLLOW 打开、mode 0o600；README 写明权限要求。
-   (b) 锁在 Linux 抽象 namespace 里，没有权限控制，锁名可以由路径算出来。
-       实测本机任意进程先 listen 同名 socket，runner 就报 already running，起不来。
-       影响只是本地 DoS，在 README 里说明即可。
+🟡✅ F39 → 接受现状（与 F29 同类），crontab 的对照行为已记录。
+🟡✅ F40 → 已修复（a 代码校验、b 文档说明），见上方。
 
 🟡 F41 F18 的描述已过时，并有残留代码
    F18 写的是"list 已从包导出，也支持 tsx src/list.ts [dir] 直接运行"，

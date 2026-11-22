@@ -212,6 +212,12 @@ Starts the minute-based scheduler. Immediately takes a single-instance lock keye
 
 If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule table and calls `process.exit(0)` instead of starting the scheduler. No lock is taken in that branch.
 
+### Permissions
+
+On startup `cronjob()` checks that `dir` and `logDir` are owned by the current user and are **not group- or world-writable**, and throws rather than starting if not. Both directories are equivalent to code execution as the runner's user — anyone who can write `dir` can drop a script, and anyone who can write `logDir` can append to job logs. `/tmp`-style shared directories are rejected by design. Custom log files are created with mode `0640`; existing files are appended to without changing their mode. The check is skipped when running as root (root can write anywhere, so it proves nothing) and on platforms without `process.getuid` (Windows).
+
+The lock name is derived from `dir`, so it is predictable; any local process that binds that abstract socket first will make the runner report `cronjob-js already running`. That is a local denial of service at worst — it cannot be used to make the runner execute anything.
+
 ### `UserCronjobConfig`
 
 | Option     | Type                                       | Default                                                          | Description                                                                                                                                                       |
@@ -220,11 +226,20 @@ If `process.argv` contains `--list` or `-l`, `cronjob()` prints the schedule tab
 | `logDir`   | `string`                                   | same as `dir`                                                    | Where per-job logs are written. Created if missing.                                                                                                               |
 | `include`  | `string[]`                                 | `['**/*.{ts,js,sh}']`                                            | Glob patterns for job scripts (passed to `fs.glob`). Add `'**/*.py'` if you use Python.                                                                           |
 | `exclude`  | `string[]`                                 | see below                                                        | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
-| `timezone` | `string`                                   | `'Asia/Shanghai'`                                                | IANA timezone used for cron matching and for the `timeFormat` timestamps.                                                                                         |
+| `timezone` | `string`                                   | `'Asia/Shanghai'`                                                | IANA timezone used for cron matching and for the `timeFormat` timestamps. See [Daylight saving time](#daylight-saving-time).                                     |
 | `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                                                    | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
 | `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)`                                | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
 
 Invalid config throws a `TypeError` naming the option (`dir`, `logDir`, `include`, …); an unknown `timezone` throws a `RangeError` from `Intl.DateTimeFormat`.
+
+#### Daylight saving time
+
+Matching uses the wall clock in `timezone`. In a DST zone that means:
+
+- The repeated hour after a fall-back runs matching jobs **twice** (for example `30 1 * * *` in `America/New_York` on 2026-11-01, at both 01:30 EDT and 01:30 EST).
+- The missing hour after a spring-forward runs them **not at all** (for example `30 2 * * *` on 2026-03-08 in `America/New_York`).
+
+This is the opposite of vixie/Debian `cron`, whose man page says jobs skipped by a forward jump "will be run soon after the change" and jobs in the repeated hour "will not be re-run". If exact DST behaviour matters, schedule in a zone without DST (UTC is the obvious choice). The default `Asia/Shanghai` has no DST.
 
 #### Default `exclude`
 

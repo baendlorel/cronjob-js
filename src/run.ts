@@ -6,6 +6,7 @@ import path from 'node:path';
 import { env } from 'node:process';
 
 import { CMD_NONE } from './interpreter.js';
+import { LOG_FILE_MODE } from './initialize.js';
 
 export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
   let output: number | null = null;
@@ -33,7 +34,7 @@ export function run(cx: CronjobContext, { filepath, interpreter }: Job) {
     const cmd = interpreter.cmd;
     const args = interpreter.args.concat(filepath);
 
-    output = fs.openSync(logfile, 'a');
+    output = fs.openSync(logfile, 'a', LOG_FILE_MODE);
 
     const child = spawn(cmd, args, {
       stdio: ['ignore', output, output],
