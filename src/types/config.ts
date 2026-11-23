@@ -48,6 +48,13 @@ export interface UserCronjobConfig {
   jobcwd: string | ((scriptPath: string) => string);
 
   /**
+   * 为了避免极端情况下，setTimeout略微提早一点点触发，进行时间修正的毫秒数
+   *
+   * 默认值为1
+   */
+  scheduleCorrection: number;
+
+  /**
    * 输出日志的函数
    * @param tag 日志标记
    * @param args 要记录的内容

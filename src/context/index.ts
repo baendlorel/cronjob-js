@@ -51,6 +51,7 @@ export function createContext(
     include = DEFAULTS.include,
     exclude = DEFAULTS.exclude,
     timezone = DEFAULTS.timezone,
+    scheduleCorrection = 1,
     write,
   } = Object(rawConfig) as UserCronjobConfig;
 
@@ -60,6 +61,10 @@ export function createContext(
 
   if (typeof logDir !== 'string') {
     throw new TypeError('`logDir` must be a string');
+  }
+
+  if (typeof scheduleCorrection !== 'number') {
+    throw new TypeError('`scheduleCorrection` must be a number');
   }
 
   if (typeof jobcwd !== 'string' && typeof jobcwd !== 'function') {
@@ -97,6 +102,7 @@ export function createContext(
     dir: absDir,
     logDir: absLogDir,
     jobcwd: jobcwdFn,
+    scheduleCorrection,
     include,
     exclude,
     timezone,

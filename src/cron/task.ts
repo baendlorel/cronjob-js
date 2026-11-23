@@ -11,9 +11,9 @@ export interface TaskController {
 }
 
 /** 下一分钟边界（本地毫秒截断到分钟） */
-const nextMinuteBoundary = (from: Date) => {
+const nextMinuteBoundary = (cx: CronjobContext, from: Date) => {
   const next = new Date(from.getTime() + 60000);
-  next.setSeconds(0, 0);
+  next.setSeconds(0, cx.scheduleCorrection);
   return next;
 };
 
@@ -30,7 +30,7 @@ export function runTask(cx: CronjobContext, fn: (now: Date) => void | Promise<vo
     }
 
     const now = new Date();
-    const nextMinute = nextMinuteBoundary(now);
+    const nextMinute = nextMinuteBoundary(cx, now);
 
     cx.jobTimer = setTimeout(() => {
       // 定时器已经触发，句柄作废；stop 时靠它判断是否还有待触发的定时器
