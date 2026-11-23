@@ -42,6 +42,7 @@ npm i krontab
 创建一个任务脚本：
 
 对于cronjob/backup.js
+
 ```js
 // @cron 0 3 * * * # 每天凌晨三点
 console.log('backup', new Date().toISOString());
@@ -50,6 +51,7 @@ console.log('backup', new Date().toISOString());
 在项目根目录启动 runner：
 
 对于外面的main.js
+
 ```js
 import { cronjob } from 'krontab';
 
@@ -246,15 +248,15 @@ await cronjob({
 
 ### `UserCronjobConfig`
 
-| 选项       | 类型                                       | 默认值                            | 说明                                                                                                                           |
-| ---------- | ------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `dir`      | `string`                                   | `process.cwd()`                   | 扫描任务脚本的目录，不存在则创建。                                                                                             |
-| `logDir`   | `string`                                   | 与 `dir` 相同                     | 任务日志目录，不存在则创建。                                                                                                   |
+| 选项       | 类型                                       | 默认值                                   | 说明                                                                                                                           |
+| ---------- | ------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `dir`      | `string`                                   | `process.cwd()`                          | 扫描任务脚本的目录，不存在则创建。                                                                                             |
+| `logDir`   | `string`                                   | 与 `dir` 相同                            | 任务日志目录，不存在则创建。                                                                                                   |
 | `include`  | `string[]`                                 | `['**/*.{ts,js,sh,cts,mts,cjs,mjs,py}']` | 匹配任务脚本的 glob（传给 `fs.glob`）。                                                                                        |
-| `exclude`  | `string[]`                                 | 见下文                            | 排除的 glob（作为 `exclude` 传给 `fs.glob`）。                                                                                 |
-| `timezone` | `string`                                   | `'Asia/Shanghai'`                 | 用于 cron 匹配和 `timeFormat` 时间戳的 IANA 时区。见[夏令时](#夏令时)。                                                        |
-| `jobcwd`   | `string \| (scriptPath: string) => string` | 与 `dir` 相同                     | spawn 出来的任务的 cwd。传函数可以按脚本路径动态决定。                                                                         |
-| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)` | 主日志的输出位置。`tag` 是 `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]` 之一。默认写 stdout，时间戳用 `timezone`。 |
+| `exclude`  | `string[]`                                 | 见下文                                   | 排除的 glob（作为 `exclude` 传给 `fs.glob`）。                                                                                 |
+| `timezone` | `string`                                   | `'Asia/Shanghai'`                        | 用于 cron 匹配和 `timeFormat` 时间戳的 IANA 时区。见[夏令时](#夏令时)。                                                        |
+| `jobcwd`   | `string \| (scriptPath: string) => string` | 与 `dir` 相同                            | spawn 出来的任务的 cwd。传函数可以按脚本路径动态决定。                                                                         |
+| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)`        | 主日志的输出位置。`tag` 是 `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]` 之一。默认写 stdout，时间戳用 `timezone`。 |
 
 非法配置会抛 `TypeError` 并指明选项名（`dir`、`logDir`、`include` 等）；未知的 `timezone` 会由 `Intl.DateTimeFormat` 抛 `RangeError`。
 
@@ -319,6 +321,7 @@ interface TaskController {
 - **退出码不告警。** 退出都有日志，可以查看日志。
 - **没有任务生命周期回调。** 没有「任务开始」「任务结束」的回调；极简的调度器不应该有这些。
 - **定时器按分钟对齐，不是按秒。** 进程忙或主机跨边界挂起时，tick 会在事件循环轮到它时发生，漏掉的那一分钟不补。
+- **并发数限制。** krontab 不会限制你，限制你的是系统，以`ulimit -u`查看最大进程数。总之同一时间触发太多是不好的。但几十几百个还是没问题的。
 
 krontab 本体非常适合用 pm2 保活。runner 死掉后，直到 pm2 把它重启，否则什么都不会跑。
 

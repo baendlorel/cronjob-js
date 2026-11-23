@@ -244,15 +244,15 @@ The lock name is derived from `dir`, so it is predictable; any local process tha
 
 ### `UserCronjobConfig`
 
-| Option     | Type                                       | Default                           | Description                                                                                                                                                       |
-| ---------- | ------------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`      | `string`                                   | `process.cwd()`                   | Directory scanned for job scripts. Created if missing.                                                                                                            |
-| `logDir`   | `string`                                   | same as `dir`                     | Where per-job logs are written. Created if missing.                                                                                                               |
+| Option     | Type                                       | Default                                  | Description                                                                                                                                                       |
+| ---------- | ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`      | `string`                                   | `process.cwd()`                          | Directory scanned for job scripts. Created if missing.                                                                                                            |
+| `logDir`   | `string`                                   | same as `dir`                            | Where per-job logs are written. Created if missing.                                                                                                               |
 | `include`  | `string[]`                                 | `['**/*.{ts,js,sh,cts,mts,cjs,mjs,py}']` | Glob patterns for job scripts (passed to `fs.glob`).                                                                                                              |
-| `exclude`  | `string[]`                                 | see below                         | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
-| `timezone` | `string`                                   | `'Asia/Shanghai'`                 | IANA timezone used for cron matching and for the `timeFormat` timestamps. See [Daylight saving time](#daylight-saving-time).                                      |
-| `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                     | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
-| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)` | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
+| `exclude`  | `string[]`                                 | see below                                | Glob patterns to skip (passed to `fs.glob` as `exclude`).                                                                                                         |
+| `timezone` | `string`                                   | `'Asia/Shanghai'`                        | IANA timezone used for cron matching and for the `timeFormat` timestamps. See [Daylight saving time](#daylight-saving-time).                                      |
+| `jobcwd`   | `string \| (scriptPath: string) => string` | same as `dir`                            | Working directory for spawned jobs. Pass a function to derive it per script.                                                                                      |
+| `write`    | `(tag: Tag, ...args: any[]) => void`       | `console.log(time, tag, ...args)`        | Where runner log lines go. `tag` is one of `[INFO]` `[WARN]` `[ERROR]` `[SPAWN]` `[EXIT]` `[DEBUG]`. The default writes to stdout with a timestamp in `timezone`. |
 
 Invalid config throws a `TypeError` naming the option (`dir`, `logDir`, `include`, …); an unknown `timezone` throws a `RangeError` from `Intl.DateTimeFormat`.
 
@@ -317,6 +317,7 @@ These are deliberate, not missing features:
 - **No exit-code alerts.** Every exit is logged; read the log if you care.
 - **No job lifecycle hooks.** There is no callback for "job started" or "job finished"; a minimal scheduler should not have them.
 - **The timer is minute-aligned, not second-aligned.** If the process is busy or the host is suspended across a boundary, the tick happens when the event loop gets to it, and there is no catch-up for the missed minute.
+- **Maximum concurrency is system-limited.** krontab does not impose a limit on how many jobs can run simultaneously; the limit is determined by the system, e.g., `ulimit -u` for the maximum number of processes. Triggering too many jobs at the same time is generally not recommended, but dozens or hundreds are usually fine.
 
 krontab itself is best kept alive by pm2. If the runner dies, nothing runs until pm2 restarts it.
 
